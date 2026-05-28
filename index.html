@@ -745,7 +745,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28k</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28l</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -984,6 +984,10 @@
           <label>Hide games w/o odds</label>
           <input type="checkbox" id="hideNoOdds" checked style="width:auto;cursor:pointer;">
         </div>
+        <div class="control-row">
+          <label>Hide started games</label>
+          <input type="checkbox" id="hideStarted" style="width:auto;cursor:pointer;">
+        </div>
         <button class="btn primary" id="refreshBtn" style="margin-top:8px;">↻ Refresh Data</button>
       </div>
     </div>
@@ -1042,7 +1046,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28k</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28l</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2689,6 +2693,8 @@ const App = {
     $('stakeMode').onchange = () => this.renderEdges();
     const hno = $('hideNoOdds');
     if (hno) hno.onchange = () => { this.hideNoOdds = hno.checked; this.renderEdges(); };
+    const hst = $('hideStarted');
+    if (hst) hst.onchange = () => { this.hideStarted = hst.checked; this.renderEdges(); };
 
     // Odds API key — persisted in localStorage, read by tennis module
     const keyInput = $('oddsKey');
@@ -3032,9 +3038,19 @@ const App = {
 
     // Hide games with no odds on either side (toggle in sidebar, default on)
     const hideNoOdds = this.hideNoOdds !== false;
-    const visibleRows = hideNoOdds
-      ? rows.filter(r => r.odds1 || r.odds2)
-      : rows;
+    // Hide games that have already started (toggle, default off). A match counts
+    // as started once its start_time has passed (small grace handled by ESPN data).
+    const hideStarted = this.hideStarted === true;
+    const now = Date.now();
+    const hasStarted = (r) => {
+      const st = r.mt && r.mt.startTime ? new Date(r.mt.startTime).getTime() : null;
+      return st != null && !isNaN(st) && st <= now;
+    };
+    const visibleRows = rows.filter(r => {
+      if (hideNoOdds && !(r.odds1 || r.odds2)) return false;
+      if (hideStarted && hasStarted(r)) return false;
+      return true;
+    });
     const hiddenCount = rows.length - visibleRows.length;
     const flooredCount = rows.filter(r => r.flooredOut).length;
 
