@@ -504,37 +504,54 @@
     max-width: 420px;
   }
   .why-text.open { display: block; }
-  .sh-line {
-    font-size: 10px;
-    color: var(--text-dim);
-    margin-top: 5px;
-    padding: 4px 8px;
-    background: var(--bg-elev);
-    border-left: 2px solid var(--accent-dim);
-    border-radius: 0 3px 3px 0;
-    display: inline-block;
-  }
   .sh-tag {
     font-size: 8px; letter-spacing: 0.1em; color: var(--accent);
     background: rgba(245,166,35,0.12); padding: 1px 5px; border-radius: 2px; margin-right: 6px;
   }
-  .sh-odds { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 
-  /* set-handicap block — aligned grid */
+  /* set-handicap block — manual book-odds entry */
   .sh-block {
     margin-top: 6px; padding: 5px 8px;
     background: var(--bg-elev); border-left: 2px solid var(--accent-dim);
     border-radius: 0 3px 3px 0; display: inline-block;
   }
-  .sh-head { margin-bottom: 3px; }
+  .sh-head { margin-bottom: 4px; display: flex; align-items: center; }
+  .sh-hint { font-size: 8px; color: var(--text-faint); letter-spacing: .03em; }
   .sh-grid {
-    display: grid; grid-template-columns: auto auto auto; gap: 2px 10px;
+    display: grid; grid-template-columns: auto auto auto auto; gap: 4px 10px;
     align-items: center; font-size: 10px; color: var(--text-dim);
     font-variant-numeric: tabular-nums;
   }
   .sh-name { color: var(--text); font-weight: 500; }
   .sh-cell { white-space: nowrap; }
-  .sh-noline { color: var(--text-faint); font-style: italic; }
+  .sh-edge { min-width: 44px; }
+  .set-input {
+    width: 56px; background: var(--bg); border: 1px solid var(--border-bright);
+    color: var(--text); font-family: var(--mono); font-size: 10px;
+    padding: 2px 5px; border-radius: 2px; text-align: right;
+  }
+  .set-input:focus { outline: none; border-color: var(--accent); }
+
+  /* scoreline distribution block */
+  .sc-block {
+    margin-top: 6px; padding: 5px 8px;
+    background: var(--bg-elev); border-left: 2px solid var(--border-bright);
+    border-radius: 0 3px 3px 0; max-width: 360px;
+  }
+  .sc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .sc-tag {
+    font-size: 8px; letter-spacing: 0.1em; color: var(--text-dim);
+    background: var(--bg-elev-2); padding: 1px 5px; border-radius: 2px;
+  }
+  .sc-hint { font-size: 9px; color: var(--text-faint); }
+  .sc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .sc-cell { font-size: 9px; color: var(--text-dim); }
+  .sc-lbl { white-space: nowrap; margin-bottom: 1px; }
+  .sc-pct { font-size: 11px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .sc-bar { height: 3px; background: var(--bg-elev-2); border-radius: 2px; margin-top: 2px; overflow: hidden; }
+  .sc-fill { height: 100%; background: var(--text-faint); border-radius: 2px; }
+  .sc-hi .sc-pct { color: var(--accent); }
+  .sc-hi .sc-fill { background: var(--accent); }
 
   /* ─── bet log ─── */
   .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
@@ -721,7 +738,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28f</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28i</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -868,9 +885,10 @@
         <div class="faq-a">
           <p>A <strong>set handicap</strong> bet adjusts the result by sets. The most common is <span class="accent">−1.5 sets</span> on the favourite (they must win 2–0 in a best-of-3) versus <span class="accent">+1.5 sets</span> on the underdog (they cover if they win even one set, or win the match).</p>
           <p>BONE prices these from a relationship measured over thousands of past matches: <strong>how often a favourite of a given strength actually wins in straight sets.</strong> A slight favourite wins 2–0 less than 40% of the time; a heavy favourite does it around 70–88%. Multiplying that by the match-win probability gives the fair −1.5 price; the rest is the fair +1.5 price.</p>
-          <p>The "SET H'CAP" line under each match shows BONE's fair odds <em>and</em> the best book price for both sides, with the edge. BONE now also fetches live set-handicap prices from the bookmakers and treats sets as a real bet: for every match it compares the moneyline edge against the set-handicap edge and recommends whichever is higher. The verdict pick is tagged <span class="market-tag market-ml" style="font-size:8px">ML</span> for a moneyline bet or <span class="market-tag market-set" style="font-size:8px">SETS</span> for a set-handicap bet.</p>
-          <p class="note">The win-probability floor applies to set bets too: a set side is only recommended if the model gives it at least your floor % chance to <em>cash</em>. So a +1.5 underdog bet whose cash-probability falls below the floor is skipped, just like a longshot moneyline. This keeps set bets honest rather than chasing fat +1.5 prices that rarely land.</p>
-          <p class="note">Why no <em>game</em> handicaps (e.g. −4.5 games)? We tested it honestly. Pricing game lines needs a serve-level model, and backtesting showed that model only predicts serve performance ~11% better than guessing the tour average — too noisy to price half-game lines without inventing fake edges. Set handicaps are coarser and ride on match-win probability, which BONE predicts well, so those we trust. Game handicaps were dropped rather than shipped unreliable.</p>
+          <p>The "SET H'CAP" block under each match shows BONE's <strong>fair</strong> −1.5 and +1.5 prices, plus two input boxes. Tennis set-handicap odds aren't carried reliably by the odds APIs (they return moneyline only, or games handicaps), so you enter the book's set price yourself — read it off your bookmaker and type it in. BONE instantly computes the edge, applies the win-probability floor, and if it's a good bet it joins the ranked list tagged <span class="market-tag market-set" style="font-size:8px">SETS</span> (moneyline bets are tagged <span class="market-tag market-ml" style="font-size:8px">ML</span>). Your entered prices are saved locally.</p>
+          <p class="note">The win-probability floor applies to set bets too: a set side is only recommended if the model gives it at least your floor % chance to <em>cash</em>. So a +1.5 underdog bet whose cash-probability falls below the floor is skipped, just like a longshot moneyline.</p>
+          <p class="note">Set bets you log are left pending for manual settlement — a +1.5 underdog can win the bet while losing the match, so they can't be auto-settled from the match result alone. And manual set prices aren't captured for closing-line (CLV) tracking, since that only works for auto-fetched odds.</p>
+          <p class="note">Why no <em>game</em> handicaps (e.g. −4.5 games)? We tested it honestly. Pricing game lines needs a serve-level model, and backtesting showed that model only predicts serve performance ~11% better than guessing the tour average — too noisy to price half-game lines without inventing fake edges. Set handicaps are coarser and ride on match-win probability, which BONE predicts well, so those we trust.</p>
         </div>
       </div>
 
@@ -1017,7 +1035,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28f</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28i</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1105,7 +1123,6 @@ const TennisModule = (() => {
     key: localStorage.getItem('bone_odds_key') || '',
     host: 'https://api.the-odds-api.com',
     market: 'h2h',
-    setMarket: 'spreads',   // tennis set handicap (-1.5/+1.5 sets) — separate request, extra quota
   };
 
   // ── DATA SOURCE ──────────────────────────────────────────────────────
@@ -1610,8 +1627,7 @@ const TennisModule = (() => {
     let remaining = null;
     for (const key of tennisKeys) {
       try {
-        const markets = `${ODDS_API.market},${ODDS_API.setMarket}`;
-        const url = `${ODDS_API.host}/v4/sports/${key}/odds?bookmakers=${bookKeys}&markets=${markets}&oddsFormat=decimal&apiKey=${ODDS_API.key}`;
+        const url = `${ODDS_API.host}/v4/sports/${key}/odds?bookmakers=${bookKeys}&markets=${ODDS_API.market}&oddsFormat=decimal&apiKey=${ODDS_API.key}`;
         const r = await fetch(url);
         remaining = r.headers.get('x-requests-remaining');
         if (!r.ok) { log(`odds ${key}: ${r.status}`, 'err'); continue; }
@@ -1619,9 +1635,7 @@ const TennisModule = (() => {
         for (const ev of events) {
           const k1 = surnameKey(ev.home_team);
           const k2 = surnameKey(ev.away_team);
-          // collect per-book prices for each player
           const byBook = {};     // bookTitle -> { [surnameKey]: h2h price }
-          const byBookSet = {};  // bookTitle -> { [surnameKey]: { point, price } }
           for (const bk of (ev.bookmakers || [])) {
             const h2h = (bk.markets || []).find(m => m.key === 'h2h');
             if (h2h) {
@@ -1630,18 +1644,10 @@ const TennisModule = (() => {
                 byBook[bk.title][surnameKey(oc.name)] = oc.price;
               }
             }
-            // Set handicap: outcomes carry a `point` (-1.5 / +1.5) and a price.
-            const sp = (bk.markets || []).find(m => m.key === 'spreads');
-            if (sp) {
-              byBookSet[bk.title] = {};
-              for (const oc of (sp.outcomes || [])) {
-                byBookSet[bk.title][surnameKey(oc.name)] = { point: oc.point, price: oc.price };
-              }
-            }
           }
-          if (Object.keys(byBook).length > 0 || Object.keys(byBookSet).length > 0) {
+          if (Object.keys(byBook).length > 0) {
             const pairKey = [k1, k2].sort().join('|');
-            STATE.autoOdds.set(pairKey, { k1, k2, byBook, byBookSet });
+            STATE.autoOdds.set(pairKey, { k1, k2, byBook });
             matchCount++;
           }
         }
@@ -1649,7 +1655,7 @@ const TennisModule = (() => {
         log(`odds ${key} err: ${e.message}`, 'err');
       }
     }
-    log(`odds: matched ${matchCount} markets (h2h + sets) from ${enabledBooks.length} book(s)${remaining ? ` · ${remaining} reqs left` : ''}`, 'ok');
+    log(`odds: matched ${matchCount} markets from ${enabledBooks.length} book(s)${remaining ? ` · ${remaining} reqs left` : ''}`, 'ok');
     return { ok: true, count: matchCount, remaining };
   };
 
@@ -1679,43 +1685,12 @@ const TennisModule = (() => {
       if (o2 && o2 > best2.price) best2 = { price: o2, book };
     }
 
-    // Best set-handicap price per player across enabled books. CRITICAL: only
-    // accept lines at exactly ±1.5 sets. The Odds API `spreads` market for
-    // tennis sometimes returns game handicaps or other points (±2.5, ±3.5,
-    // ±4.5 games) under the same market key — comparing those against our
-    // P(win 2-0) model produces garbage edges (the +79% nonsense). A -1.5 set
-    // line on a heavy favourite should be ~1.5-1.7, never 2.0+. Reject anything
-    // that isn't a true set line rather than show a fake edge.
-    let bestM15_1 = { price: 0, book: '' }, bestP15_1 = { price: 0, book: '' };
-    let bestM15_2 = { price: 0, book: '' }, bestP15_2 = { price: 0, book: '' };
-    const setBooks = entry.byBookSet || {};
-    const isSetLine = (pt) => Math.abs(Math.abs(pt) - 1.5) < 0.01;  // exactly ±1.5
-    for (const [book, prices] of Object.entries(setBooks)) {
-      if (enabled.size && ![...enabled].some(n => book.toLowerCase().includes(n) || n.includes(book.toLowerCase()))) continue;
-      const s1 = prices[k1], s2 = prices[k2];
-      if (s1 && s1.price && isSetLine(s1.point)) {
-        if (s1.point < 0 && s1.price > bestM15_1.price) bestM15_1 = { price: s1.price, book };
-        if (s1.point > 0 && s1.price > bestP15_1.price) bestP15_1 = { price: s1.price, book };
-      }
-      if (s2 && s2.price && isSetLine(s2.point)) {
-        if (s2.point < 0 && s2.price > bestM15_2.price) bestM15_2 = { price: s2.price, book };
-        if (s2.point > 0 && s2.price > bestP15_2.price) bestP15_2 = { price: s2.price, book };
-      }
-    }
-
     return {
       books,
       odds1: best1.price || null,
       odds2: best2.price || null,
       book1: best1.book,
       book2: best2.book,
-      // set-handicap best prices (null if no book quoted that line)
-      set: {
-        p1Minus15: bestM15_1.price || null, p1Minus15Book: bestM15_1.book,
-        p1Plus15:  bestP15_1.price || null, p1Plus15Book:  bestP15_1.book,
-        p2Minus15: bestM15_2.price || null, p2Minus15Book: bestM15_2.book,
-        p2Plus15:  bestP15_2.price || null, p2Plus15Book:  bestP15_2.book,
-      },
     };
   };
 
@@ -1752,6 +1727,37 @@ const TennisModule = (() => {
     }
     p20 = Math.min(p20, favProb);  // can't win 2-0 more often than winning
     return { favMinus15: p20, dogPlus15: 1 - p20 };
+  };
+
+  // ── Scoreline distribution ─────────────────────────────────────────
+  // From the favourite's match-win prob, look up the empirical distribution
+  // over the four best-of-3 outcomes (built by the pipeline from real matches).
+  // Returns probabilities oriented to the FAVOURITE, plus which player is fav.
+  // favProb is P(favourite wins the match); favIsP1 says who the favourite is.
+  const scoreDistribution = (favProb) => {
+    const sl = STATE.scorelines;
+    if (!sl || favProb == null) return null;
+    const bin = Math.min(9, Math.max(0, Math.floor(favProb * 10)));
+    let d = sl[bin];
+    if (d == null) {
+      // nearest populated bin
+      let best = null, bestDist = 99;
+      for (const k of Object.keys(sl)) {
+        const dist = Math.abs(+k - bin);
+        if (dist < bestDist) { bestDist = dist; best = +k; }
+      }
+      if (best == null) return null;
+      d = sl[best];
+    }
+    // Normalise to sum to 1 (guards against rounding / sparse bins)
+    const tot = (d.p20 + d.p21 + d.p12 + d.p02) || 1;
+    return {
+      fav20: d.p20 / tot,   // favourite wins 2-0
+      fav21: d.p21 / tot,   // favourite wins 2-1
+      fav12: d.p12 / tot,   // favourite loses 1-2 (wins a set)
+      fav02: d.p02 / tot,   // favourite loses 0-2
+      n: d.n,
+    };
   };
 
   const fairProb = (p1, p2, surface) => {
@@ -1810,6 +1816,7 @@ const TennisModule = (() => {
         STATE.elo.set(k, { display: p.n, overall: p.o, matches: p.m, lastDate: p.d, tour: p.t });
       }
       STATE.straightSets = data.straightSets || null;
+      STATE.scorelines = data.scorelines || null;
       STATE.refDate = data.refDate;
       STATE.pipelineBacktest = data.backtest || null;   // precomputed in the Action
       PIPELINE.loaded = true;
@@ -1830,7 +1837,7 @@ const TennisModule = (() => {
       if (!data.matches) return false;
       STATE.autoOdds = new Map();
       for (const [pairKey, m] of Object.entries(data.matches)) {
-        STATE.autoOdds.set(pairKey, { k1: m.k1, k2: m.k2, byBook: m.byBook, byBookSet: m.byBookSet || {} });
+        STATE.autoOdds.set(pairKey, { k1: m.k1, k2: m.k2, byBook: m.byBook });
       }
       PIPELINE.oddsFromPipeline = true;
       const cnt = Object.keys(data.matches).length;
@@ -1879,7 +1886,8 @@ const TennisModule = (() => {
         const favProb = Math.max(fp.p1Prob, 1 - fp.p1Prob);
         const favIsP1 = fp.p1Prob >= 0.5;
         const sh = setHandicap(favProb);
-        return { ...m, ...fp, autoOdds: auto, setHcap: sh, favIsP1 };
+        const scoreDist = scoreDistribution(favProb);
+        return { ...m, ...fp, autoOdds: auto, setHcap: sh, scoreDist, favIsP1 };
       });
       return enriched;
     },
@@ -2069,37 +2077,71 @@ const TennisModule = (() => {
       // Set-handicap block: compact aligned grid — fair price, book price, edge.
       // Book edge only shown when the line is plausible (sanity-capped), so a
       // mislabeled feed line never shows a fake +79% edge.
+      // ── Scoreline distribution (informational) ──
+      // Empirical P over the four best-of-3 outcomes, oriented to each player.
+      let scoreLine = '';
+      if (m.scoreDist && m.confidence !== 'none') {
+        const sd = m.scoreDist;
+        const favName = (m.favIsP1 ? m.p1 : m.p2).split(' ').pop();
+        const dogName = (m.favIsP1 ? m.p2 : m.p1).split(' ').pop();
+        // Four outcomes from favourite's perspective, most-likely first ordering kept fixed
+        const cells = [
+          { lbl: `${favName} 2-0`, p: sd.fav20 },
+          { lbl: `${favName} 2-1`, p: sd.fav21 },
+          { lbl: `${dogName} 2-1`, p: sd.fav12 },  // fav loses 1-2 == dog wins 2-1
+          { lbl: `${dogName} 2-0`, p: sd.fav02 },  // fav loses 0-2 == dog wins 2-0
+        ];
+        const mostLikely = cells.reduce((a, b) => b.p > a.p ? b : a, cells[0]);
+        const bar = cells.map(c => {
+          const pct = (c.p * 100);
+          const hi = (c === mostLikely);
+          return `<div class="sc-cell${hi ? ' sc-hi' : ''}">
+            <div class="sc-lbl">${c.lbl}</div>
+            <div class="sc-pct">${pct.toFixed(0)}%</div>
+            <div class="sc-bar"><div class="sc-fill" style="width:${Math.round(pct)}%"></div></div>
+          </div>`;
+        }).join('');
+        scoreLine = `<div class="sc-block">
+          <div class="sc-head"><span class="sc-tag">SCORELINE</span><span class="sc-hint">most likely: ${mostLikely.lbl}</span></div>
+          <div class="sc-grid">${bar}</div>
+        </div>`;
+      }
+
       let shLine = '';
       if (m.setHcap && m.confidence !== 'none') {
         const favName = m.favIsP1 ? m.p1 : m.p2;
         const dogName = m.favIsP1 ? m.p2 : m.p1;
-        const fairFav = m.setHcap.favMinus15 > 0 ? (1/m.setHcap.favMinus15).toFixed(2) : '—';
-        const fairDog = m.setHcap.dogPlus15 > 0 ? (1/m.setHcap.dogPlus15).toFixed(2) : '—';
-        const so = m.autoOdds?.set;
-        const bookFav = so ? (m.favIsP1 ? so.p1Minus15 : so.p2Minus15) : null;
-        const bookDog = so ? (m.favIsP1 ? so.p2Plus15 : so.p1Plus15) : null;
-        const SET_CAP = 25;
-        const favEdge = (bookFav && m.setHcap.favMinus15 > 0) ? ((m.setHcap.favMinus15 * bookFav) - 1) * 100 : null;
-        const dogEdge = (bookDog && m.setHcap.dogPlus15 > 0) ? ((m.setHcap.dogPlus15 * bookDog) - 1) * 100 : null;
+        const favProb = m.setHcap.favMinus15;
+        const dogProb = m.setHcap.dogPlus15;
+        const fairFav = favProb > 0 ? (1/favProb).toFixed(2) : '—';
+        const fairDog = dogProb > 0 ? (1/dogProb).toFixed(2) : '—';
+        // manually-entered book prices (read off the bookmaker)
+        const setFav = opts.setFav || '';
+        const setDog = opts.setDog || '';
+        const edgeOf = (prob, price) => {
+          const p = parseFloat(price);
+          if (!p || !(prob > 0)) return null;
+          return ((prob * p) - 1) * 100;
+        };
+        const favEdge = edgeOf(favProb, setFav);
+        const dogEdge = edgeOf(dogProb, setDog);
         const edgeBadge = (e) => {
-          if (e == null || isNaN(e) || e > SET_CAP) return '';  // hide implausible
+          if (e == null || isNaN(e)) return '';
           const cls = e >= 5 ? 'edge-good' : (e >= 0 ? 'edge-weak' : 'edge-neg');
           return `<span class="edge-badge ${cls}" style="font-size:8px">${e>=0?'+':''}${e.toFixed(1)}%</span>`;
         };
-        const bookCell = (price, edge) => {
-          if (!price) return `<span class="sh-cell sh-noline">no book line</span>`;
-          if (edge != null && edge > SET_CAP) return `<span class="sh-cell sh-noline">book ${price.toFixed(2)} (line mismatch)</span>`;
-          return `<span class="sh-cell">book ${price.toFixed(2)} ${edgeBadge(edge)}</span>`;
-        };
+        const k = `${m.p1}|${m.p2}`;
         shLine = `<div class="sh-block">
-          <div class="sh-head"><span class="sh-tag">SET H'CAP</span></div>
+          <div class="sh-head"><span class="sh-tag">SET H'CAP</span><span class="sh-hint">enter book odds →</span></div>
           <div class="sh-grid">
             <span class="sh-name">${favName.split(' ').pop()} −1.5</span>
             <span class="sh-cell">fair ${fairFav}</span>
-            ${bookCell(bookFav, favEdge)}
+            <input class="set-input" type="number" step="0.01" min="1.01" data-setside="fav" data-key="${k}" value="${setFav}" placeholder="book">
+            <span class="sh-edge">${edgeBadge(favEdge)}</span>
             <span class="sh-name">${dogName.split(' ').pop()} +1.5</span>
             <span class="sh-cell">fair ${fairDog}</span>
-            ${bookCell(bookDog, dogEdge)}
+            <input class="set-input" type="number" step="0.01" min="1.01" data-setside="dog" data-key="${k}" value="${setDog}" placeholder="book">
+            <span class="sh-edge">${edgeBadge(dogEdge)}</span>
           </div>
         </div>`;
       }
@@ -2112,6 +2154,7 @@ const TennisModule = (() => {
           <span class="surface ${surfClass}">${m.surface}</span>
           ${confTag}
           <div style="font-size:10px;color:var(--text-faint);margin-top:3px">${m.tour} · ${m.event || ''}</div>
+          ${scoreLine}
           ${shLine}
           ${reasons}
         </td>
@@ -2851,40 +2894,33 @@ const App = {
       const e1ok = p1Prob >= winFloor ? e1 : -Infinity;
       const e2ok = p2Prob >= winFloor ? e2 : -Infinity;
 
-      // ── Set-handicap edges (-1.5 / +1.5 sets) ──
-      // Model probs: setHcap.favMinus15 = P(favourite wins 2-0);
-      //              setHcap.dogPlus15  = P(underdog wins a set or the match).
-      // Map those to each player, then compare to the best book set price.
-      // The win-prob floor applies to the probability the SET BET cashes.
+      // ── Set-handicap edges (-1.5 / +1.5 sets) — MANUAL book odds ──
+      // The Odds API and odds-api.io don't reliably carry tennis set markets,
+      // so the book price for the set line is entered by hand (read off the
+      // bookmaker). saved.setFav = favourite -1.5 book price; saved.setDog =
+      // underdog +1.5 book price. Model probs come from the straight-sets table.
       const sh = mt.setHcap;
-      const setOdds = mt.autoOdds?.set || null;
-      const setCands = [];  // each: { side(1/2), line, prob, odds, book, edge }
-      // Sanity cap: a real set-handicap edge from a correctly-matched line is
-      // small (single digits, occasionally low double digits). An edge above
-      // this almost always means the book "set" price is actually a different
-      // market (games handicap) mislabeled by the feed — reject it rather than
-      // surface a fake +50/+80% "value" bet.
-      const SET_EDGE_SANITY_CAP = 25;  // %
-      if (sh && setOdds && mt.confidence !== 'none') {
+      const setFavOdds = saved.setFav ? parseFloat(saved.setFav) : null;  // fav -1.5
+      const setDogOdds = saved.setDog ? parseFloat(saved.setDog) : null;  // dog +1.5
+      const setCands = [];  // each: { side(1/2), line, prob, odds, edge }
+      // Light sanity cap — manual entry can have typos (e.g. 12.0 vs 1.20).
+      const SET_EDGE_SANITY_CAP = 40;  // %
+      if (sh && mt.confidence !== 'none') {
         const favIsP1 = mt.favIsP1;
         // Favourite -1.5 (must win 2-0)
         const favProbSet = sh.favMinus15;
-        const favOdds = favIsP1 ? setOdds.p1Minus15 : setOdds.p2Minus15;
-        const favBook = favIsP1 ? setOdds.p1Minus15Book : setOdds.p2Minus15Book;
-        if (favProbSet > 0 && favOdds) {
-          const edge = ((favProbSet * favOdds) - 1) * 100;
+        if (favProbSet > 0 && setFavOdds) {
+          const edge = ((favProbSet * setFavOdds) - 1) * 100;
           if (edge <= SET_EDGE_SANITY_CAP) {
-            setCands.push({ side: favIsP1 ? 1 : 2, line: '-1.5', prob: favProbSet, odds: favOdds, book: favBook, edge });
+            setCands.push({ side: favIsP1 ? 1 : 2, line: '-1.5', prob: favProbSet, odds: setFavOdds, book: 'manual', edge });
           }
         }
         // Underdog +1.5 (wins a set or the match)
         const dogProbSet = sh.dogPlus15;
-        const dogOdds = favIsP1 ? setOdds.p2Plus15 : setOdds.p1Plus15;
-        const dogBook = favIsP1 ? setOdds.p2Plus15Book : setOdds.p1Plus15Book;
-        if (dogProbSet > 0 && dogOdds) {
-          const edge = ((dogProbSet * dogOdds) - 1) * 100;
+        if (dogProbSet > 0 && setDogOdds) {
+          const edge = ((dogProbSet * setDogOdds) - 1) * 100;
           if (edge <= SET_EDGE_SANITY_CAP) {
-            setCands.push({ side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: dogOdds, book: dogBook, edge });
+            setCands.push({ side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: setDogOdds, book: 'manual', edge });
           }
         }
       }
@@ -2948,7 +2984,7 @@ const App = {
       const topTier = hasBet && betProb >= 0.60 && bestEdge >= 3
         && ['v-strong','v-bet'].includes(verdict.cls);
 
-      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, reasons: mt.reasons || [] };
+      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, setFav: saved.setFav || '', setDog: saved.setDog || '', reasons: mt.reasons || [] };
     });
 
     // Sort by confidence score: win-rate first, edge as tiebreak (built into the
@@ -2997,7 +3033,7 @@ const App = {
     const tbody = table.querySelector('tbody');
 
     for (const r of visibleRows) {
-      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, confPct: r.confPct, topTier: r.topTier, reasons: r.reasons });
+      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, confPct: r.confPct, topTier: r.topTier, setFav: r.setFav, setDog: r.setDog, reasons: r.reasons });
       if (r.topTier) tr.classList.add('top-tier-row');
       tbody.appendChild(tr);
     }
@@ -3076,6 +3112,19 @@ const App = {
         this.saveOdds();
         clearTimeout(this._reflowTimer);
         this._reflowTimer = setTimeout(() => this.renderEdges(), 300);
+      };
+    });
+
+    // wire set-handicap manual odds inputs
+    container.querySelectorAll('.set-input').forEach(inp => {
+      inp.oninput = () => {
+        const key = inp.dataset.key;
+        const side = inp.dataset.setside;  // 'fav' or 'dog'
+        this.odds[key] = this.odds[key] || {};
+        this.odds[key][side === 'fav' ? 'setFav' : 'setDog'] = inp.value;
+        this.saveOdds();
+        clearTimeout(this._reflowTimer);
+        this._reflowTimer = setTimeout(() => this.renderEdges(), 400);
       };
     });
 
