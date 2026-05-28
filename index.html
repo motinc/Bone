@@ -508,6 +508,12 @@
     font-size: 8px; letter-spacing: 0.1em; color: var(--accent);
     background: rgba(245,166,35,0.12); padding: 1px 5px; border-radius: 2px; margin-right: 6px;
   }
+  .match-time {
+    font-size: 10px; color: var(--text-dim); margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .match-time .cd-soon { color: var(--accent); font-weight: 600; }
+  .match-time .cd-live { color: var(--good); font-weight: 600; }
 
   /* set-handicap block — manual book-odds entry */
   .sh-block {
@@ -739,7 +745,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28j</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28k</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1036,7 +1042,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28j</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28k</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1657,6 +1663,18 @@ const TennisModule = (() => {
       }
     }
     log(`odds: matched ${matchCount} markets from ${enabledBooks.length} book(s)${remaining ? ` · ${remaining} reqs left` : ''}`, 'ok');
+    // Diagnostic: which book titles actually appeared in the feed? Catches a
+    // book silently dropping out (e.g. The Odds API delisting/renaming it).
+    const seenBooks = new Set();
+    for (const [, entry] of STATE.autoOdds) {
+      for (const b of Object.keys(entry.byBook || {})) seenBooks.add(b);
+    }
+    if (seenBooks.size) {
+      const wanted = enabledBooks.map(b => b.name);
+      const missing = wanted.filter(w => ![...seenBooks].some(s => s.toLowerCase().includes(w.toLowerCase()) || w.toLowerCase().includes(s.toLowerCase())));
+      log(`books in feed: ${[...seenBooks].join(', ')}`, 'ok');
+      if (missing.length) log(`⚠ enabled but NOT in feed: ${missing.join(', ')} — likely delisted/renamed by The Odds API`, 'err');
+    }
     return { ok: true, count: matchCount, remaining };
   };
 
@@ -2157,6 +2175,23 @@ const TennisModule = (() => {
           <span class="surface ${surfClass}">${m.surface}</span>
           ${confTag}
           <div style="font-size:10px;color:var(--text-faint);margin-top:3px">${m.tour} · ${m.event || ''}</div>
+          ${(() => {
+            if (!m.startTime) return '';
+            const start = new Date(m.startTime);
+            if (isNaN(start)) return '';
+            const now = new Date();
+            const mins = Math.round((start - now) / 60000);
+            // local time, e.g. "9:00 PM"
+            const timeStr = start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            const dayStr = start.toLocaleDateString([], { weekday: 'short' });
+            let countdown, cdClass;
+            if (mins < -180) { countdown = 'in progress / done'; cdClass = 'cd-live'; }
+            else if (mins < 0) { countdown = 'started'; cdClass = 'cd-live'; }
+            else if (mins < 60) { countdown = `in ${mins}m`; cdClass = 'cd-soon'; }
+            else if (mins < 1440) { countdown = `in ${Math.floor(mins/60)}h ${mins%60}m`; cdClass = ''; }
+            else { countdown = `in ${Math.floor(mins/1440)}d`; cdClass = ''; }
+            return `<div class="match-time">🕐 ${dayStr} ${timeStr} · <span class="${cdClass}">${countdown}</span></div>`;
+          })()}
           ${scoreLine}
           ${shLine}
           ${reasons}
