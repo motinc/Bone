@@ -208,6 +208,28 @@
   .edge-weak { background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border-bright); }
   .edge-neg { color: var(--bad); }
 
+  /* win-probability (confidence) badges */
+  .win-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 2px;
+    font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums;
+  }
+  .win-high { background: var(--good); color: #1a1a1a; }
+  .win-good { background: rgba(143, 200, 80, 0.20); color: var(--good); }
+  .win-ok   { background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border-bright); }
+  .win-low  { color: var(--text-faint); }
+  .top-tier-tag {
+    font-size: 8px; font-weight: 700; letter-spacing: .5px; color: var(--good);
+    margin-top: 3px;
+  }
+  /* highlight the high-confidence rows */
+  tr.top-tier-row { background: linear-gradient(90deg, rgba(143,200,80,0.07), transparent 60%); }
+  tr.top-tier-row td:first-child { border-left: 2px solid var(--good); }
+  .sb-link {
+    display: inline-block; margin-top: 5px; font-size: 9px; color: var(--accent-dim);
+    text-decoration: none; border-bottom: 1px dotted var(--accent-dim);
+  }
+  .sb-link:hover { color: var(--accent); }
+
   .empty-state {
     text-align: center;
     padding: 60px 20px;
@@ -683,7 +705,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28d</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28e</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -880,7 +902,7 @@
 <main>
   <section class="panel" id="mainPanel">
     <div class="panel-title" id="panelTitle">Today's Edges</div>
-    <div class="panel-sub" id="panelSub">model probability vs market — sorted by edge</div>
+    <div class="panel-sub" id="panelSub">ranked by win probability, then edge — most likely winners first</div>
     <div id="content">
       <div class="empty-state">
         <div class="big">⌁</div>
@@ -979,7 +1001,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28d</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28e</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1969,10 +1991,14 @@ const TennisModule = (() => {
         }).join('');
         oddsCell = `<td class="odds-cell">${bookRows}</td>`;
       } else {
-        // manual entry fallback
+        // manual entry fallback — no auto odds for this match (API may lag the
+        // bookmaker's live site, or names didn't match). Type the odds you see
+        // and BONE computes the edge from them. Link out to find them fast.
+        const sbQuery = encodeURIComponent(`${m.p1} ${m.p2} tennis`);
         oddsCell = `<td class="num">
-          <input class="odds-input" type="number" step="0.01" min="1.01" data-side="1" data-key="${m.p1}|${m.p2}" value="${opts.odds1 || ''}" placeholder="P1 odds">
-          <input class="odds-input" type="number" step="0.01" min="1.01" data-side="2" data-key="${m.p1}|${m.p2}" value="${opts.odds2 || ''}" placeholder="P2 odds" style="margin-top:4px">
+          <input class="odds-input" type="number" step="0.01" min="1.01" data-side="1" data-key="${m.p1}|${m.p2}" value="${opts.odds1 || ''}" placeholder="${m.p1.split(' ').pop()} odds">
+          <input class="odds-input" type="number" step="0.01" min="1.01" data-side="2" data-key="${m.p1}|${m.p2}" value="${opts.odds2 || ''}" placeholder="${m.p2.split(' ').pop()} odds" style="margin-top:4px">
+          <a class="sb-link" href="https://www.sportsbet.com.au/search?q=${sbQuery}" target="_blank" rel="noopener">find on Sportsbet ↗</a>
         </td>`;
       }
 
@@ -2063,12 +2089,21 @@ const TennisModule = (() => {
         ${oddsCell}
         ${edgeCell(edge1)}
         ${edgeCell(edge2)}
+        ${(() => {
+          // Win% cell — the model's win probability for the recommended side.
+          // This is the "how often does this actually land" number.
+          if (opts.confPct == null) return `<td class="num"><span style="color:var(--text-faint)">—</span></td>`;
+          const p = opts.confPct;
+          const cls = p >= 70 ? 'win-high' : (p >= 60 ? 'win-good' : (p >= 50 ? 'win-ok' : 'win-low'));
+          const star = opts.topTier ? `<div class="top-tier-tag">★ BET THIS</div>` : '';
+          return `<td class="num"><span class="win-badge ${cls}">${p}%</span>${star}</td>`;
+        })()}
         ${verdictCell}
       `;
       return tr;
     },
 
-    headers: ['Match', 'Model %', 'Fair Odds', 'Book · P1 · P2', 'Edge (P1)', 'Edge (P2)', 'Verdict'],
+    headers: ['Match', 'Model %', 'Fair Odds', 'Book · P1 · P2', 'Edge (P1)', 'Edge (P2)', 'Win%', 'Verdict'],
   };
 })();
 
@@ -2859,10 +2894,30 @@ const App = {
               : 'No value here — the price is fair or against you.' }
         : this.computeVerdict(bestEdge, betProb, betOdds, bankroll, stakeMode, mt.confidence);
 
-      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, reasons: mt.reasons || [] };
+      // ── Confidence score ──
+      // You want bets that WIN, not just bets with edge. So win-probability is
+      // the primary driver and edge is the tiebreak. A 0–100 score: the integer
+      // part is win-% (so an 80%-to-win bet always outranks a 60% one), and the
+      // fractional part encodes edge to break ties between similar win-rates.
+      // Only positive-edge bets that clear the floor get a score; the rest = 0.
+      const hasBet = bestEdge !== -Infinity && bestEdge > 0;
+      const confScore = hasBet
+        ? Math.round(betProb * 100) + Math.min(0.99, bestEdge / 100)
+        : 0;
+      // Display value: just the win-% (what "confidence" means intuitively)
+      const confPct = hasBet ? Math.round(betProb * 100) : null;
+      // "Bet this" tier: model likes it to win AND there's real edge.
+      // High-confidence = wins ≥60% of the time with an actionable edge (≥3%).
+      const topTier = hasBet && betProb >= 0.60 && bestEdge >= 3
+        && ['v-strong','v-bet'].includes(verdict.cls);
+
+      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, reasons: mt.reasons || [] };
     });
 
-    rows.sort((a,b) => b.bestEdge - a.bestEdge);
+    // Sort by confidence score: win-rate first, edge as tiebreak (built into the
+    // fractional part). Falls back to raw edge for zero-score rows so PASSes
+    // still order sensibly among themselves.
+    rows.sort((a,b) => (b.confScore - a.confScore) || (b.bestEdge - a.bestEdge));
 
     // Hide games with no odds on either side (toggle in sidebar, default on)
     const hideNoOdds = this.hideNoOdds !== false;
@@ -2905,27 +2960,49 @@ const App = {
     const tbody = table.querySelector('tbody');
 
     for (const r of visibleRows) {
-      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, reasons: r.reasons });
+      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, confPct: r.confPct, topTier: r.topTier, reasons: r.reasons });
+      if (r.topTier) tr.classList.add('top-tier-row');
       tbody.appendChild(tr);
     }
 
-    // ── Summary banner: today's best plays ──
-    const actionable = visibleRows.filter(r => ['v-strong','v-bet'].includes(r.verdict.cls));
+    // ── Summary banner: lead with the high-confidence tier ──
+    // topTier = wins ≥60% AND edge ≥3% AND an actionable verdict. These are the
+    // "bets you actually want" — likely to win and carrying value. Everything
+    // else with edge is shown as secondary.
+    const topTierRows = visibleRows.filter(r => r.topTier);
+    const otherBets = visibleRows.filter(r => !r.topTier && ['v-strong','v-bet'].includes(r.verdict.cls));
     const leans = visibleRows.filter(r => r.verdict.cls === 'v-lean');
     const suspect = visibleRows.filter(r => r.verdict.cls === 'v-suspect');
     let banner = '';
-    if (actionable.length > 0) {
-      const top = actionable.slice(0, 3).map(r =>
+
+    if (topTierRows.length > 0) {
+      const top = topTierRows.slice(0, 5).map(r =>
         `<div class="bet-pick">
-           <span class="bet-pick-player">${r.betPlayer}</span>
-           <span class="bet-pick-detail">@ ${r.betOdds.toFixed(2)}${r.betBook ? ` · ${r.betBook}` : ''} · <span class="accent">+${r.bestEdge.toFixed(1)}%</span>${r.verdict.stake ? ` · stake $${r.verdict.stake.toFixed(0)}` : ''}</span>
+           <span class="bet-pick-player">★ ${r.betLabel || r.betPlayer}</span>
+           <span class="bet-pick-detail">${r.confPct}% to win · @ ${r.betOdds.toFixed(2)}${r.betBook ? ` · ${r.betBook}` : ''} · <span class="accent">+${r.bestEdge.toFixed(1)}% edge</span>${r.verdict.stake ? ` · stake $${r.verdict.stake.toFixed(0)}` : ''}</span>
          </div>`
       ).join('');
       banner = `
         <div class="summary-banner good">
-          <div class="summary-head">✓ ${actionable.length} bet${actionable.length>1?'s':''} worth taking today${leans.length?` · ${leans.length} marginal lean${leans.length>1?'s':''}`:''}</div>
+          <div class="summary-head">★ ${topTierRows.length} high-confidence bet${topTierRows.length>1?'s':''} to take today</div>
+          <div class="summary-sub">Likely to win (≥60%) AND priced with real edge. Sorted by win probability.</div>
           ${top}
-          ${actionable.length > 3 ? `<div class="summary-more">+${actionable.length-3} more below</div>` : ''}
+          ${topTierRows.length > 5 ? `<div class="summary-more">+${topTierRows.length-5} more in the table</div>` : ''}
+          ${otherBets.length ? `<div class="summary-more">+ ${otherBets.length} lower-confidence bet${otherBets.length>1?'s':''} with edge below (riskier — more coin-flip)</div>` : ''}
+        </div>`;
+    } else if (otherBets.length > 0) {
+      // Edge exists but nothing clears the high-confidence bar
+      const top = otherBets.slice(0, 3).map(r =>
+        `<div class="bet-pick">
+           <span class="bet-pick-player">${r.betLabel || r.betPlayer}</span>
+           <span class="bet-pick-detail">${r.confPct}% to win · @ ${r.betOdds.toFixed(2)} · <span class="accent">+${r.bestEdge.toFixed(1)}%</span></span>
+         </div>`
+      ).join('');
+      banner = `
+        <div class="summary-banner lean">
+          <div class="summary-head">~ ${otherBets.length} bet${otherBets.length>1?'s':''} with edge, but none high-confidence</div>
+          <div class="summary-sub">These have value but win under 60% of the time — more variance. Bet smaller or wait.</div>
+          ${top}
         </div>`;
     } else if (leans.length > 0) {
       banner = `<div class="summary-banner lean">
