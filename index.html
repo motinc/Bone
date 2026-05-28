@@ -1359,24 +1359,35 @@ const TennisModule = (() => {
           // Path 2: nested groupings / tournament structures (some Slam shapes)
           const groupings = e.groupings || e.tournaments || [];
           for (const g of groupings) {
+            // Only singles — skip doubles/mixed (they won't match singles ratings)
+            const gName = (g.grouping?.displayName || g.grouping?.slug || g.name || '').toLowerCase();
+            if (gName && !/singles/.test(gName)) continue;
+            if (/doubles/.test(gName)) continue;
+
             const gComps = g.competitions || g.events || [];
             for (const comp of gComps) {
+              // Skip finished matches — not bettable
+              const state = comp.status?.type?.state || '';
+              if (state === 'post' || comp.status?.type?.completed) continue;
+
               const competitors = comp.competitors || [];
               if (competitors.length >= 2) {
                 const c1 = competitors[0];
                 const c2 = competitors[1];
-                const p1 = c1.athlete?.displayName || c1.displayName;
-                const p2 = c2.athlete?.displayName || c2.displayName;
+                const p1 = c1.athlete?.displayName || c1.displayName || c1.athlete?.shortName;
+                const p2 = c2.athlete?.displayName || c2.displayName || c2.athlete?.shortName;
                 if (!p1 || !p2) continue;
-                const nm = (e.name || g.name || '').toLowerCase();
+                // skip doubles pairings that slipped through (names with " / ")
+                if (p1.includes('/') || p2.includes('/')) continue;
+                const nm = (e.name || e.shortName || gName).toLowerCase();
                 let surface = 'hard';
-                if (/clay|roland|monte|madrid|rome|barcelona/.test(nm)) surface = 'clay';
-                else if (/grass|wimbledon|queens|halle|eastbourne/.test(nm)) surface = 'grass';
+                if (/clay|roland|monte|madrid|rome|barcelona|hamburg|kitzbuhel|bastad|umag|gstaad/.test(nm)) surface = 'clay';
+                else if (/grass|wimbledon|queens|halle|eastbourne|s.hertogenbosch|stuttgart|mallorca|nottingham/.test(nm)) surface = 'grass';
                 pushMatch({
                   tour: t.tour, p1, p2, surface,
-                  event: e.name || g.name || '',
+                  event: e.name || e.shortName || '',
                   status: comp.status?.type?.description || '',
-                  startTime: comp.date,
+                  startTime: comp.date || comp.startDate,
                 });
               }
             }
