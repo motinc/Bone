@@ -61,3 +61,28 @@ To re-tune: edit `CONFIG` in `scripts/build-ratings.js`, and keep the matching
 
 $0. GitHub Actions is free for public repos. The Odds API free tier (500
 credits/month) is plenty at one h2h request per refresh.
+
+## Closing-line capture (CLV)
+
+The odds builder automatically snapshots each match's final odds just before it
+starts and accumulates them in `data/closing.json` (pruned to the last 14 days).
+The dashboard's bet log reads this file and fills in the closing odds on your
+logged bets, so CLV is computed for you. No setup needed — it just works once
+the pipeline is running. CLV only appears for bets on matches the pipeline saw
+close while it was running, so it populates going forward, not retroactively.
+
+## Cross-device bet sync (optional)
+
+The bet log can sync across your devices via a **private** GitHub repo:
+
+1. Create a new **private** repo, e.g. `bone-bets` (empty is fine).
+2. Create a **fine-grained personal access token** (GitHub → Settings →
+   Developer settings → Fine-grained tokens). Scope it to **only** the
+   `bone-bets` repo, with **Contents: Read and write**. Nothing else.
+3. In BONE, open the bet log (▤), click "Set up" under Cross-device sync, enter
+   `owner/bone-bets` and the token, and click Connect & pull.
+
+The token is stored on that device and sent only to api.github.com. Because the
+repo is private and the token is single-repo scoped, a leak would expose only
+your bet log — not your account or other repos. Repeat the setup on each device
+with the same repo+token to share one log.

@@ -1,0 +1,44 @@
+name: Build BONE data
+
+# Runs every 6 hours, and can be triggered manually from the Actions tab.
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch: {}
+
+# Allow the action to commit the regenerated data files back to the repo
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build ratings (Sackmann data, no secret needed)
+        run: node scripts/build-ratings.js
+
+      - name: Build odds (uses secret key)
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: node scripts/build-odds.js
+
+      - name: Commit updated data
+        run: |
+          git config user.name "bone-bot"
+          git config user.email "actions@github.com"
+          git add data/ratings.json data/odds.json
+          git add data/closing.json 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "data: refresh ratings + odds [skip ci]"
+            git push
+          fi
