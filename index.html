@@ -406,6 +406,12 @@
   .verdict-pick {
     font-size: 11px; color: var(--text); margin-top: 4px; font-weight: 500;
   }
+  .market-tag {
+    display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: .5px;
+    padding: 1px 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle;
+  }
+  .market-ml  { background: rgba(120,140,170,.18); color: var(--text-dim); }
+  .market-set { background: rgba(225,170,60,.18); color: var(--accent); }
   .verdict-stake {
     font-size: 11px; color: var(--good); margin-top: 2px; font-variant-numeric: tabular-nums;
   }
@@ -677,7 +683,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28b</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28d</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -824,7 +830,8 @@
         <div class="faq-a">
           <p>A <strong>set handicap</strong> bet adjusts the result by sets. The most common is <span class="accent">−1.5 sets</span> on the favourite (they must win 2–0 in a best-of-3) versus <span class="accent">+1.5 sets</span> on the underdog (they cover if they win even one set, or win the match).</p>
           <p>BONE prices these from a relationship measured over thousands of past matches: <strong>how often a favourite of a given strength actually wins in straight sets.</strong> A slight favourite wins 2–0 less than 40% of the time; a heavy favourite does it around 70–88%. Multiplying that by the match-win probability gives the fair −1.5 price; the rest is the fair +1.5 price.</p>
-          <p>The "SET H'CAP" line under each match shows BONE's fair odds for both sides. Compare them to a bookmaker's set-handicap odds the same way you do match odds — if the book pays more than BONE's fair price, there's value.</p>
+          <p>The "SET H'CAP" line under each match shows BONE's fair odds <em>and</em> the best book price for both sides, with the edge. BONE now also fetches live set-handicap prices from the bookmakers and treats sets as a real bet: for every match it compares the moneyline edge against the set-handicap edge and recommends whichever is higher. The verdict pick is tagged <span class="market-tag market-ml" style="font-size:8px">ML</span> for a moneyline bet or <span class="market-tag market-set" style="font-size:8px">SETS</span> for a set-handicap bet.</p>
+          <p class="note">The win-probability floor applies to set bets too: a set side is only recommended if the model gives it at least your floor % chance to <em>cash</em>. So a +1.5 underdog bet whose cash-probability falls below the floor is skipped, just like a longshot moneyline. This keeps set bets honest rather than chasing fat +1.5 prices that rarely land.</p>
           <p class="note">Why no <em>game</em> handicaps (e.g. −4.5 games)? We tested it honestly. Pricing game lines needs a serve-level model, and backtesting showed that model only predicts serve performance ~11% better than guessing the tour average — too noisy to price half-game lines without inventing fake edges. Set handicaps are coarser and ride on match-win probability, which BONE predicts well, so those we trust. Game handicaps were dropped rather than shipped unreliable.</p>
         </div>
       </div>
@@ -889,6 +896,14 @@
         <div class="control-row">
           <label>Min edge %</label>
           <input type="number" id="minEdge" value="5" step="0.5" min="0">
+        </div>
+        <div class="control-row" style="flex-direction:column;align-items:stretch;gap:4px;">
+          <label style="display:flex;justify-content:space-between;">
+            <span>Min win-prob</span>
+            <span id="winFloorVal" style="color:var(--accent);font-variant-numeric:tabular-nums;">50%</span>
+          </label>
+          <input type="range" id="winFloor" min="20" max="60" step="1" value="50" style="width:100%;cursor:pointer;accent-color:var(--accent);">
+          <span style="font-size:9px;color:var(--text-faint);line-height:1.3;">Hides bets the model expects to lose more often than this — no longshots, however juicy the edge.</span>
         </div>
         <div class="control-row">
           <label>Bankroll ($)</label>
@@ -964,7 +979,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28b</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28d</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1027,6 +1042,7 @@ const TennisModule = (() => {
     allMatches: [],       // raw historical matches, kept for backtesting
     refDate: null,        // most recent match date (for recency weighting)
     backtest: null,       // last backtest result
+    pipelineBacktest: null, // precomputed backtest from ratings.json (deployed)
   };
 
   // ⚠️ SECURITY NOTE: this key is exposed in the browser. Fine for local/private
@@ -1051,6 +1067,7 @@ const TennisModule = (() => {
     key: localStorage.getItem('bone_odds_key') || '',
     host: 'https://api.the-odds-api.com',
     market: 'h2h',
+    setMarket: 'spreads',   // tennis set handicap (-1.5/+1.5 sets) — separate request, extra quota
   };
 
   // ── DATA SOURCE ──────────────────────────────────────────────────────
@@ -1547,12 +1564,16 @@ const TennisModule = (() => {
       return { ok: true, count: 0 };
     }
 
-    // Step 2: fetch h2h odds for each active tennis competition, filtered to our books
+    // Step 2: fetch h2h + set-handicap (spreads) odds for each active tennis
+    // competition, filtered to our books. Spreads is a separate market on The
+    // Odds API and adds to quota — but bundling it in the same request keeps
+    // it to one call per sport.
     let matchCount = 0;
     let remaining = null;
     for (const key of tennisKeys) {
       try {
-        const url = `${ODDS_API.host}/v4/sports/${key}/odds?bookmakers=${bookKeys}&markets=${ODDS_API.market}&oddsFormat=decimal&apiKey=${ODDS_API.key}`;
+        const markets = `${ODDS_API.market},${ODDS_API.setMarket}`;
+        const url = `${ODDS_API.host}/v4/sports/${key}/odds?bookmakers=${bookKeys}&markets=${markets}&oddsFormat=decimal&apiKey=${ODDS_API.key}`;
         const r = await fetch(url);
         remaining = r.headers.get('x-requests-remaining');
         if (!r.ok) { log(`odds ${key}: ${r.status}`, 'err'); continue; }
@@ -1561,18 +1582,28 @@ const TennisModule = (() => {
           const k1 = surnameKey(ev.home_team);
           const k2 = surnameKey(ev.away_team);
           // collect per-book prices for each player
-          const byBook = {};  // bookTitle -> { [surnameKey]: price }
+          const byBook = {};     // bookTitle -> { [surnameKey]: h2h price }
+          const byBookSet = {};  // bookTitle -> { [surnameKey]: { point, price } }
           for (const bk of (ev.bookmakers || [])) {
-            const mkt = (bk.markets || []).find(m => m.key === 'h2h');
-            if (!mkt) continue;
-            byBook[bk.title] = {};
-            for (const oc of (mkt.outcomes || [])) {
-              byBook[bk.title][surnameKey(oc.name)] = oc.price;
+            const h2h = (bk.markets || []).find(m => m.key === 'h2h');
+            if (h2h) {
+              byBook[bk.title] = {};
+              for (const oc of (h2h.outcomes || [])) {
+                byBook[bk.title][surnameKey(oc.name)] = oc.price;
+              }
+            }
+            // Set handicap: outcomes carry a `point` (-1.5 / +1.5) and a price.
+            const sp = (bk.markets || []).find(m => m.key === 'spreads');
+            if (sp) {
+              byBookSet[bk.title] = {};
+              for (const oc of (sp.outcomes || [])) {
+                byBookSet[bk.title][surnameKey(oc.name)] = { point: oc.point, price: oc.price };
+              }
             }
           }
-          if (Object.keys(byBook).length > 0) {
+          if (Object.keys(byBook).length > 0 || Object.keys(byBookSet).length > 0) {
             const pairKey = [k1, k2].sort().join('|');
-            STATE.autoOdds.set(pairKey, { k1, k2, byBook });
+            STATE.autoOdds.set(pairKey, { k1, k2, byBook, byBookSet });
             matchCount++;
           }
         }
@@ -1580,7 +1611,7 @@ const TennisModule = (() => {
         log(`odds ${key} err: ${e.message}`, 'err');
       }
     }
-    log(`odds: matched ${matchCount} markets from ${enabledBooks.length} book(s)${remaining ? ` · ${remaining} reqs left` : ''}`, 'ok');
+    log(`odds: matched ${matchCount} markets (h2h + sets) from ${enabledBooks.length} book(s)${remaining ? ` · ${remaining} reqs left` : ''}`, 'ok');
     return { ok: true, count: matchCount, remaining };
   };
 
@@ -1609,12 +1640,40 @@ const TennisModule = (() => {
       if (o1 && o1 > best1.price) best1 = { price: o1, book };
       if (o2 && o2 > best2.price) best2 = { price: o2, book };
     }
+
+    // Best set-handicap (-1.5/+1.5) price per player across enabled books.
+    // Each book quotes a `point` per player; -1.5 = "must win 2-0", +1.5 = "wins
+    // a set or the match". We track the best price for each player's -1.5 line
+    // and each player's +1.5 line separately.
+    let bestM15_1 = { price: 0, book: '' }, bestP15_1 = { price: 0, book: '' };
+    let bestM15_2 = { price: 0, book: '' }, bestP15_2 = { price: 0, book: '' };
+    const setBooks = entry.byBookSet || {};
+    for (const [book, prices] of Object.entries(setBooks)) {
+      if (enabled.size && ![...enabled].some(n => book.toLowerCase().includes(n) || n.includes(book.toLowerCase()))) continue;
+      const s1 = prices[k1], s2 = prices[k2];
+      if (s1 && s1.price) {
+        if (s1.point < 0 && s1.price > bestM15_1.price) bestM15_1 = { price: s1.price, book };
+        if (s1.point > 0 && s1.price > bestP15_1.price) bestP15_1 = { price: s1.price, book };
+      }
+      if (s2 && s2.price) {
+        if (s2.point < 0 && s2.price > bestM15_2.price) bestM15_2 = { price: s2.price, book };
+        if (s2.point > 0 && s2.price > bestP15_2.price) bestP15_2 = { price: s2.price, book };
+      }
+    }
+
     return {
       books,
       odds1: best1.price || null,
       odds2: best2.price || null,
       book1: best1.book,
       book2: best2.book,
+      // set-handicap best prices (null if no book quoted that line)
+      set: {
+        p1Minus15: bestM15_1.price || null, p1Minus15Book: bestM15_1.book,
+        p1Plus15:  bestP15_1.price || null, p1Plus15Book:  bestP15_1.book,
+        p2Minus15: bestM15_2.price || null, p2Minus15Book: bestM15_2.book,
+        p2Plus15:  bestP15_2.price || null, p2Plus15Book:  bestP15_2.book,
+      },
     };
   };
 
@@ -1710,6 +1769,7 @@ const TennisModule = (() => {
       }
       STATE.straightSets = data.straightSets || null;
       STATE.refDate = data.refDate;
+      STATE.pipelineBacktest = data.backtest || null;   // precomputed in the Action
       PIPELINE.loaded = true;
       buildNameIndex();   // for fuzzy name matching against ESPN/odds feeds
       const age = data.generated ? new Date(data.generated).toLocaleString() : '?';
@@ -1728,7 +1788,7 @@ const TennisModule = (() => {
       if (!data.matches) return false;
       STATE.autoOdds = new Map();
       for (const [pairKey, m] of Object.entries(data.matches)) {
-        STATE.autoOdds.set(pairKey, { k1: m.k1, k2: m.k2, byBook: m.byBook });
+        STATE.autoOdds.set(pairKey, { k1: m.k1, k2: m.k2, byBook: m.byBook, byBookSet: m.byBookSet || {} });
       }
       PIPELINE.oddsFromPipeline = true;
       const cnt = Object.keys(data.matches).length;
@@ -1852,9 +1912,21 @@ const TennisModule = (() => {
     },
 
     runBacktest() {
-      const res = runBacktest(STATE.allMatches, 0.15);
-      STATE.backtest = res;
-      return res;
+      // Deployed: the GitHub Action already ran the backtest on the full match
+      // set and wrote results into ratings.json. Use those (the raw matches
+      // aren't shipped to keep the file small). Local fallback: run in-browser
+      // against STATE.allMatches from the CSV training path.
+      if (STATE.pipelineBacktest) {
+        STATE.backtest = { ...STATE.pipelineBacktest, source: 'pipeline' };
+        return STATE.backtest;
+      }
+      if (STATE.allMatches && STATE.allMatches.length >= 500) {
+        const res = runBacktest(STATE.allMatches, 0.15);
+        res.source = 'in-browser';
+        STATE.backtest = res;
+        return res;
+      }
+      return { ok: false, reason: 'prebuilt backtest missing and no local match data — the pipeline build needs to emit a backtest block (see scripts/build-ratings.js)' };
     },
 
     setBookmakers(enabledKeys) {
@@ -1910,13 +1982,20 @@ const TennisModule = (() => {
         const v = opts.verdict;
         const stakeLine = v.stake ? `<div class="verdict-stake">$${v.stake.toFixed(0)}</div>` : '';
         const isActionable = ['v-strong','v-bet','v-lean'].includes(v.cls);
+        // Pick label: for set bets show "Sinner -1.5 sets", else the player name
+        const pickLabel = opts.betLabel || (opts.betSide === 1 ? m.p1 : m.p2);
+        const marketTag = opts.market === 'set'
+          ? `<span class="market-tag market-set" title="Set handicap bet">SETS</span>`
+          : `<span class="market-tag market-ml" title="Moneyline / match winner">ML</span>`;
         const pick = (v.cls !== 'v-pass' && v.cls !== 'v-none') ?
-          `<div class="verdict-pick">${opts.betSide === 1 ? m.p1 : m.p2}</div>` : '';
+          `<div class="verdict-pick">${marketTag}${pickLabel}</div>` : '';
         // quick-add: stash the bet details on the button for the click handler
         const betPlayer = opts.betSide === 1 ? m.p1 : m.p2;
-        const betOdds = opts.betSide === 1 ? opts.odds1 : opts.odds2;
+        const betOdds = opts.betOdds != null ? opts.betOdds : (opts.betSide === 1 ? opts.odds1 : opts.odds2);
+        const betProb = opts.betProb != null ? opts.betProb : (opts.betSide === 1 ? m.p1Prob : 1 - m.p1Prob);
+        const logName = opts.market === 'set' ? (opts.betLabel || betPlayer) : betPlayer;
         const quickAdd = (isActionable && betOdds) ?
-          `<button class="bet-add-btn" data-player="${betPlayer.replace(/"/g,'&quot;')}" data-odds="${betOdds}" data-stake="${v.stake?v.stake.toFixed(0):''}" data-match="${(m.p1+' vs '+m.p2).replace(/"/g,'&quot;')}" data-prob="${(opts.betSide===1?m.p1Prob:1-m.p1Prob).toFixed(4)}" title="Log this bet">+ log</button>` : '';
+          `<button class="bet-add-btn" data-player="${logName.replace(/"/g,'&quot;')}" data-odds="${betOdds}" data-stake="${v.stake?v.stake.toFixed(0):''}" data-match="${(m.p1+' vs '+m.p2).replace(/"/g,'&quot;')}" data-prob="${betProb.toFixed(4)}" data-market="${opts.market||'ml'}" title="Log this bet">+ log</button>` : '';
         verdictCell = `<td class="verdict-cell">
           <span class="verdict-badge ${v.cls}">${v.label}</span>
           ${pick}
@@ -1941,17 +2020,30 @@ const TennisModule = (() => {
         ? `<div class="why-row"><span class="why-toggle">why this edge?</span><div class="why-text">${opts.reasons.join(' ')}</div></div>`
         : '';
 
-      // Set-handicap fair odds (-1.5 / +1.5 sets), if priceable
+      // Set-handicap line: BONE fair odds + book price + edge, if priceable
       let shLine = '';
       if (m.setHcap && m.confidence !== 'none') {
         const favName = m.favIsP1 ? m.p1 : m.p2;
         const dogName = m.favIsP1 ? m.p2 : m.p1;
         const fairFav = m.setHcap.favMinus15 > 0 ? (1/m.setHcap.favMinus15).toFixed(2) : '—';
         const fairDog = m.setHcap.dogPlus15 > 0 ? (1/m.setHcap.dogPlus15).toFixed(2) : '—';
+        const so = m.autoOdds?.set;
+        // book prices for fav -1.5 and dog +1.5
+        const bookFav = so ? (m.favIsP1 ? so.p1Minus15 : so.p2Minus15) : null;
+        const bookDog = so ? (m.favIsP1 ? so.p2Plus15 : so.p1Plus15) : null;
+        const favEdge = (bookFav && m.setHcap.favMinus15 > 0) ? ((m.setHcap.favMinus15 * bookFav) - 1) * 100 : null;
+        const dogEdge = (bookDog && m.setHcap.dogPlus15 > 0) ? ((m.setHcap.dogPlus15 * bookDog) - 1) * 100 : null;
+        const edgeBadge = (e) => {
+          if (e == null || isNaN(e)) return '';
+          const cls = e >= 5 ? 'edge-good' : (e >= 0 ? 'edge-weak' : 'edge-neg');
+          return ` <span class="edge-badge ${cls}" style="font-size:8px">${e>=0?'+':''}${e.toFixed(1)}%</span>`;
+        };
+        const favBookTxt = bookFav ? ` · book ${bookFav.toFixed(2)}${edgeBadge(favEdge)}` : ' · no book line';
+        const dogBookTxt = bookDog ? ` · book ${bookDog.toFixed(2)}${edgeBadge(dogEdge)}` : ' · no book line';
         shLine = `<div class="sh-line">
           <span class="sh-tag">SET H'CAP</span>
-          ${favName.split(' ').pop()} −1.5 @ <span class="sh-odds">${fairFav}</span>
-          · ${dogName.split(' ').pop()} +1.5 @ <span class="sh-odds">${fairDog}</span>
+          ${favName.split(' ').pop()} −1.5: fair <span class="sh-odds">${fairFav}</span>${favBookTxt}
+          <br><span style="padding-left:46px">${dogName.split(' ').pop()} +1.5: fair <span class="sh-odds">${fairDog}</span>${dogBookTxt}</span>
         </div>`;
       }
 
@@ -2385,7 +2477,8 @@ const App = {
   quickAddBet(bet) {
     BetLog.add(bet);
     // brief confirm in the log
-    log(`logged bet: ${bet.player} @ ${bet.odds.toFixed(2)}`, 'ok');
+    const mk = bet.market === 'set' ? ' (set h\'cap)' : '';
+    log(`logged bet: ${bet.player} @ ${bet.odds.toFixed(2)}${mk}`, 'ok');
   },
 
   async autoSettleBets() {
@@ -2397,7 +2490,12 @@ const App = {
     try {
       const results = await m.getResults();   // [{p1,p2,winner}]
       let settled = 0;
+      let skippedSets = 0;
       for (const b of pending) {
+        // Set-handicap bets can't be settled from match-winner alone (a +1.5
+        // dog can win the bet while losing the match). Leave them pending for
+        // manual settlement rather than settle them on the wrong criterion.
+        if (b.market === 'set') { skippedSets++; continue; }
         // match the bet to a result by player surname
         const r = results.find(x =>
           (x.p1 && b.player && surnameMatch(x.p1, b.player)) ||
@@ -2411,7 +2509,8 @@ const App = {
         }
       }
       this.renderBetLog();
-      alert(settled ? `Settled ${settled} bet(s) from results.` : 'No matching finished results found yet. Mark manually or try later.');
+      const setNote = skippedSets ? ` ${skippedSets} set-handicap bet(s) left pending — settle those manually.` : '';
+      alert((settled ? `Settled ${settled} bet(s) from results.` : 'No matching finished results found yet. Mark manually or try later.') + setNote);
     } catch (e) {
       alert('Auto-settle failed: ' + e.message + '. Mark results manually.');
     }
@@ -2434,6 +2533,11 @@ const App = {
   bindControls() {
     $('refreshBtn').onclick = () => this.refresh();
     $('minEdge').oninput = () => this.renderEdges();
+    const wf = $('winFloor');
+    if (wf) wf.oninput = () => {
+      $('winFloorVal').textContent = wf.value + '%';
+      this.renderEdges();
+    };
     $('bankroll').oninput = () => this.renderEdges();
     $('stakeMode').onchange = () => this.renderEdges();
     const hno = $('hideNoOdds');
@@ -2503,7 +2607,7 @@ const App = {
         <div class="bt-metric"><span class="bt-label">Log-loss</span><span class="bt-num">${res.logLoss.toFixed(3)}</span></div>
         <div class="bt-metric"><span class="bt-label">Brier</span><span class="bt-num">${res.brier.toFixed(3)}</span></div>
       </div>
-      <div class="bt-sub">${res.tested.toLocaleString()} matches tested · ${res.skipped.toLocaleString()} skipped (thin data)</div>
+      <div class="bt-sub">${res.tested.toLocaleString()} matches tested · ${res.skipped.toLocaleString()} skipped (thin data)${res.source ? ` · ${res.source === 'pipeline' ? 'precomputed in pipeline' : 'run in browser'}` : ''}${res.generated ? ` · ${new Date(res.generated).toLocaleDateString()}` : ''}</div>
       <div class="cal-title">Calibration — bar = predicted, ● = actual</div>
       ${calRows || '<div style="font-size:10px;color:var(--text-faint)">not enough data per bin</div>'}
       <div class="bt-guide">
@@ -2651,6 +2755,7 @@ const App = {
     const minEdge = parseFloat($('minEdge').value) || 0;
     const bankroll = parseFloat($('bankroll').value) || 0;
     const stakeMode = $('stakeMode').value;
+    const winFloor = (parseFloat(($('winFloor')||{}).value) || 0) / 100;  // e.g. 0.50
 
     // Resolve odds: manual entry wins, else auto-fetched from API.
     // Then compute a plain-language verdict + recommended stake per match.
@@ -2665,20 +2770,96 @@ const App = {
       const odds2 = manual2 || auto2;
       const src1 = manual1 ? 'manual' : (auto1 ? 'auto' : 'none');
       const src2 = manual2 ? 'manual' : (auto2 ? 'auto' : 'none');
-      const e1 = odds1 ? ((mt.p1Prob * odds1) - 1) * 100 : -Infinity;
-      const e2 = odds2 ? (((1-mt.p1Prob) * odds2) - 1) * 100 : -Infinity;
-      const bestEdge = Math.max(e1, e2);
 
-      // Which side is the value bet?
-      const betSide = (e1 >= e2) ? 1 : 2;
-      const betPlayer = betSide === 1 ? mt.p1 : mt.p2;
-      const betOdds = betSide === 1 ? odds1 : odds2;
-      const betProb = betSide === 1 ? mt.p1Prob : (1 - mt.p1Prob);
-      const betBook = betSide === 1 ? mt.autoOdds?.book1 : mt.autoOdds?.book2;
+      const p1Prob = mt.p1Prob;
+      const p2Prob = 1 - mt.p1Prob;
+      const e1 = odds1 ? ((p1Prob * odds1) - 1) * 100 : -Infinity;
+      const e2 = odds2 ? ((p2Prob * odds2) - 1) * 100 : -Infinity;
 
-      const verdict = this.computeVerdict(bestEdge, betProb, betOdds, bankroll, stakeMode, mt.confidence);
+      // ── Win-probability floor ──
+      // Only consider a side bettable if the model expects that side to win at
+      // least `winFloor` of the time. This kills "great edge on a longshot"
+      // recommendations — bets that are +EV on paper but lose far too often to
+      // win in practice. A side below the floor is set to -Infinity edge so it
+      // can never be chosen or counted.
+      const e1ok = p1Prob >= winFloor ? e1 : -Infinity;
+      const e2ok = p2Prob >= winFloor ? e2 : -Infinity;
 
-      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, verdict, reasons: mt.reasons || [] };
+      // ── Set-handicap edges (-1.5 / +1.5 sets) ──
+      // Model probs: setHcap.favMinus15 = P(favourite wins 2-0);
+      //              setHcap.dogPlus15  = P(underdog wins a set or the match).
+      // Map those to each player, then compare to the best book set price.
+      // The win-prob floor applies to the probability the SET BET cashes.
+      const sh = mt.setHcap;
+      const setOdds = mt.autoOdds?.set || null;
+      const setCands = [];  // each: { side(1/2), line, prob, odds, book, edge }
+      if (sh && setOdds && mt.confidence !== 'none') {
+        const favIsP1 = mt.favIsP1;
+        // Favourite -1.5 (must win 2-0)
+        const favProbSet = sh.favMinus15;
+        const favOdds = favIsP1 ? setOdds.p1Minus15 : setOdds.p2Minus15;
+        const favBook = favIsP1 ? setOdds.p1Minus15Book : setOdds.p2Minus15Book;
+        if (favProbSet > 0 && favOdds) {
+          setCands.push({
+            side: favIsP1 ? 1 : 2, line: '-1.5', prob: favProbSet, odds: favOdds, book: favBook,
+            edge: ((favProbSet * favOdds) - 1) * 100,
+          });
+        }
+        // Underdog +1.5 (wins a set or the match)
+        const dogProbSet = sh.dogPlus15;
+        const dogOdds = favIsP1 ? setOdds.p2Plus15 : setOdds.p1Plus15;
+        const dogBook = favIsP1 ? setOdds.p2Plus15Book : setOdds.p1Plus15Book;
+        if (dogProbSet > 0 && dogOdds) {
+          setCands.push({
+            side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: dogOdds, book: dogBook,
+            edge: ((dogProbSet * dogOdds) - 1) * 100,
+          });
+        }
+      }
+      // Apply the floor: a set bet is only eligible if its cash probability ≥ floor.
+      let bestSet = null;
+      for (const c of setCands) {
+        if (c.prob < winFloor) continue;
+        if (!bestSet || c.edge > bestSet.edge) bestSet = c;
+      }
+      const setEdgeOk = bestSet ? bestSet.edge : -Infinity;
+
+      // ── Pick the headline bet: best of moneyline vs set, after the floor ──
+      const mlBest = Math.max(e1ok, e2ok);
+      const useSets = setEdgeOk > mlBest;
+      const bestEdge = Math.max(mlBest, setEdgeOk);
+      const market = useSets ? 'set' : 'ml';
+
+      // Did the floor suppress an otherwise-positive bet? (for messaging)
+      const rawBest = Math.max(e1, e2, ...(setCands.map(c => c.edge)), -Infinity);
+      const flooredOut = bestEdge === -Infinity && rawBest >= minEdge && rawBest !== -Infinity;
+
+      // Which side / market is the value bet (after the floor)?
+      let betSide, betPlayer, betOdds, betProb, betBook, betLabel;
+      if (useSets) {
+        betSide = bestSet.side;
+        betPlayer = betSide === 1 ? mt.p1 : mt.p2;
+        betOdds = bestSet.odds;
+        betProb = bestSet.prob;
+        betBook = bestSet.book;
+        betLabel = `${(betSide === 1 ? mt.p1 : mt.p2).split(' ').pop()} ${bestSet.line} sets`;
+      } else {
+        betSide = (e1ok >= e2ok) ? 1 : 2;
+        betPlayer = betSide === 1 ? mt.p1 : mt.p2;
+        betOdds = betSide === 1 ? odds1 : odds2;
+        betProb = betSide === 1 ? p1Prob : p2Prob;
+        betBook = betSide === 1 ? mt.autoOdds?.book1 : mt.autoOdds?.book2;
+        betLabel = betPlayer;
+      }
+
+      const verdict = bestEdge === -Infinity
+        ? { label: 'PASS', cls: 'v-pass', stake: null,
+            tip: flooredOut
+              ? `The only value here is on a side the model gives <${Math.round(winFloor*100)}% to win — below your win-prob floor. Skipped to avoid longshots.`
+              : 'No value here — the price is fair or against you.' }
+        : this.computeVerdict(bestEdge, betProb, betOdds, bankroll, stakeMode, mt.confidence);
+
+      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, reasons: mt.reasons || [] };
     });
 
     rows.sort((a,b) => b.bestEdge - a.bestEdge);
@@ -2689,6 +2870,7 @@ const App = {
       ? rows.filter(r => r.odds1 || r.odds2)
       : rows;
     const hiddenCount = rows.length - visibleRows.length;
+    const flooredCount = rows.filter(r => r.flooredOut).length;
 
     const positiveEdges = visibleRows.filter(r => r.bestEdge >= minEdge && r.bestEdge !== -Infinity).length;
     $('edgesVal').textContent = positiveEdges;
@@ -2723,7 +2905,7 @@ const App = {
     const tbody = table.querySelector('tbody');
 
     for (const r of visibleRows) {
-      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, reasons: r.reasons });
+      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, reasons: r.reasons });
       tbody.appendChild(tr);
     }
 
@@ -2802,6 +2984,7 @@ const App = {
           stake,
           match: btn.dataset.match,
           modelProb: parseFloat(btn.dataset.prob),
+          market: btn.dataset.market || 'ml',
         });
         btn.textContent = 'logged ✓';
         btn.disabled = true;
