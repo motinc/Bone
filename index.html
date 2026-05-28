@@ -520,6 +520,22 @@
   }
   .sh-odds { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 
+  /* set-handicap block — aligned grid */
+  .sh-block {
+    margin-top: 6px; padding: 5px 8px;
+    background: var(--bg-elev); border-left: 2px solid var(--accent-dim);
+    border-radius: 0 3px 3px 0; display: inline-block;
+  }
+  .sh-head { margin-bottom: 3px; }
+  .sh-grid {
+    display: grid; grid-template-columns: auto auto auto; gap: 2px 10px;
+    align-items: center; font-size: 10px; color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .sh-name { color: var(--text); font-weight: 500; }
+  .sh-cell { white-space: nowrap; }
+  .sh-noline { color: var(--text-faint); font-style: italic; }
+
   /* ─── bet log ─── */
   .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
   @media (max-width:560px){ .metric-grid { grid-template-columns: repeat(2,1fr); } }
@@ -705,7 +721,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28e</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28f</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1001,7 +1017,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28e</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28f</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1663,21 +1679,25 @@ const TennisModule = (() => {
       if (o2 && o2 > best2.price) best2 = { price: o2, book };
     }
 
-    // Best set-handicap (-1.5/+1.5) price per player across enabled books.
-    // Each book quotes a `point` per player; -1.5 = "must win 2-0", +1.5 = "wins
-    // a set or the match". We track the best price for each player's -1.5 line
-    // and each player's +1.5 line separately.
+    // Best set-handicap price per player across enabled books. CRITICAL: only
+    // accept lines at exactly ±1.5 sets. The Odds API `spreads` market for
+    // tennis sometimes returns game handicaps or other points (±2.5, ±3.5,
+    // ±4.5 games) under the same market key — comparing those against our
+    // P(win 2-0) model produces garbage edges (the +79% nonsense). A -1.5 set
+    // line on a heavy favourite should be ~1.5-1.7, never 2.0+. Reject anything
+    // that isn't a true set line rather than show a fake edge.
     let bestM15_1 = { price: 0, book: '' }, bestP15_1 = { price: 0, book: '' };
     let bestM15_2 = { price: 0, book: '' }, bestP15_2 = { price: 0, book: '' };
     const setBooks = entry.byBookSet || {};
+    const isSetLine = (pt) => Math.abs(Math.abs(pt) - 1.5) < 0.01;  // exactly ±1.5
     for (const [book, prices] of Object.entries(setBooks)) {
       if (enabled.size && ![...enabled].some(n => book.toLowerCase().includes(n) || n.includes(book.toLowerCase()))) continue;
       const s1 = prices[k1], s2 = prices[k2];
-      if (s1 && s1.price) {
+      if (s1 && s1.price && isSetLine(s1.point)) {
         if (s1.point < 0 && s1.price > bestM15_1.price) bestM15_1 = { price: s1.price, book };
         if (s1.point > 0 && s1.price > bestP15_1.price) bestP15_1 = { price: s1.price, book };
       }
-      if (s2 && s2.price) {
+      if (s2 && s2.price && isSetLine(s2.point)) {
         if (s2.point < 0 && s2.price > bestM15_2.price) bestM15_2 = { price: s2.price, book };
         if (s2.point > 0 && s2.price > bestP15_2.price) bestP15_2 = { price: s2.price, book };
       }
@@ -2046,7 +2066,9 @@ const TennisModule = (() => {
         ? `<div class="why-row"><span class="why-toggle">why this edge?</span><div class="why-text">${opts.reasons.join(' ')}</div></div>`
         : '';
 
-      // Set-handicap line: BONE fair odds + book price + edge, if priceable
+      // Set-handicap block: compact aligned grid — fair price, book price, edge.
+      // Book edge only shown when the line is plausible (sanity-capped), so a
+      // mislabeled feed line never shows a fake +79% edge.
       let shLine = '';
       if (m.setHcap && m.confidence !== 'none') {
         const favName = m.favIsP1 ? m.p1 : m.p2;
@@ -2054,22 +2076,31 @@ const TennisModule = (() => {
         const fairFav = m.setHcap.favMinus15 > 0 ? (1/m.setHcap.favMinus15).toFixed(2) : '—';
         const fairDog = m.setHcap.dogPlus15 > 0 ? (1/m.setHcap.dogPlus15).toFixed(2) : '—';
         const so = m.autoOdds?.set;
-        // book prices for fav -1.5 and dog +1.5
         const bookFav = so ? (m.favIsP1 ? so.p1Minus15 : so.p2Minus15) : null;
         const bookDog = so ? (m.favIsP1 ? so.p2Plus15 : so.p1Plus15) : null;
+        const SET_CAP = 25;
         const favEdge = (bookFav && m.setHcap.favMinus15 > 0) ? ((m.setHcap.favMinus15 * bookFav) - 1) * 100 : null;
         const dogEdge = (bookDog && m.setHcap.dogPlus15 > 0) ? ((m.setHcap.dogPlus15 * bookDog) - 1) * 100 : null;
         const edgeBadge = (e) => {
-          if (e == null || isNaN(e)) return '';
+          if (e == null || isNaN(e) || e > SET_CAP) return '';  // hide implausible
           const cls = e >= 5 ? 'edge-good' : (e >= 0 ? 'edge-weak' : 'edge-neg');
-          return ` <span class="edge-badge ${cls}" style="font-size:8px">${e>=0?'+':''}${e.toFixed(1)}%</span>`;
+          return `<span class="edge-badge ${cls}" style="font-size:8px">${e>=0?'+':''}${e.toFixed(1)}%</span>`;
         };
-        const favBookTxt = bookFav ? ` · book ${bookFav.toFixed(2)}${edgeBadge(favEdge)}` : ' · no book line';
-        const dogBookTxt = bookDog ? ` · book ${bookDog.toFixed(2)}${edgeBadge(dogEdge)}` : ' · no book line';
-        shLine = `<div class="sh-line">
-          <span class="sh-tag">SET H'CAP</span>
-          ${favName.split(' ').pop()} −1.5: fair <span class="sh-odds">${fairFav}</span>${favBookTxt}
-          <br><span style="padding-left:46px">${dogName.split(' ').pop()} +1.5: fair <span class="sh-odds">${fairDog}</span>${dogBookTxt}</span>
+        const bookCell = (price, edge) => {
+          if (!price) return `<span class="sh-cell sh-noline">no book line</span>`;
+          if (edge != null && edge > SET_CAP) return `<span class="sh-cell sh-noline">book ${price.toFixed(2)} (line mismatch)</span>`;
+          return `<span class="sh-cell">book ${price.toFixed(2)} ${edgeBadge(edge)}</span>`;
+        };
+        shLine = `<div class="sh-block">
+          <div class="sh-head"><span class="sh-tag">SET H'CAP</span></div>
+          <div class="sh-grid">
+            <span class="sh-name">${favName.split(' ').pop()} −1.5</span>
+            <span class="sh-cell">fair ${fairFav}</span>
+            ${bookCell(bookFav, favEdge)}
+            <span class="sh-name">${dogName.split(' ').pop()} +1.5</span>
+            <span class="sh-cell">fair ${fairDog}</span>
+            ${bookCell(bookDog, dogEdge)}
+          </div>
         </div>`;
       }
 
@@ -2828,6 +2859,12 @@ const App = {
       const sh = mt.setHcap;
       const setOdds = mt.autoOdds?.set || null;
       const setCands = [];  // each: { side(1/2), line, prob, odds, book, edge }
+      // Sanity cap: a real set-handicap edge from a correctly-matched line is
+      // small (single digits, occasionally low double digits). An edge above
+      // this almost always means the book "set" price is actually a different
+      // market (games handicap) mislabeled by the feed — reject it rather than
+      // surface a fake +50/+80% "value" bet.
+      const SET_EDGE_SANITY_CAP = 25;  // %
       if (sh && setOdds && mt.confidence !== 'none') {
         const favIsP1 = mt.favIsP1;
         // Favourite -1.5 (must win 2-0)
@@ -2835,20 +2872,20 @@ const App = {
         const favOdds = favIsP1 ? setOdds.p1Minus15 : setOdds.p2Minus15;
         const favBook = favIsP1 ? setOdds.p1Minus15Book : setOdds.p2Minus15Book;
         if (favProbSet > 0 && favOdds) {
-          setCands.push({
-            side: favIsP1 ? 1 : 2, line: '-1.5', prob: favProbSet, odds: favOdds, book: favBook,
-            edge: ((favProbSet * favOdds) - 1) * 100,
-          });
+          const edge = ((favProbSet * favOdds) - 1) * 100;
+          if (edge <= SET_EDGE_SANITY_CAP) {
+            setCands.push({ side: favIsP1 ? 1 : 2, line: '-1.5', prob: favProbSet, odds: favOdds, book: favBook, edge });
+          }
         }
         // Underdog +1.5 (wins a set or the match)
         const dogProbSet = sh.dogPlus15;
         const dogOdds = favIsP1 ? setOdds.p2Plus15 : setOdds.p1Plus15;
         const dogBook = favIsP1 ? setOdds.p2Plus15Book : setOdds.p1Plus15Book;
         if (dogProbSet > 0 && dogOdds) {
-          setCands.push({
-            side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: dogOdds, book: dogBook,
-            edge: ((dogProbSet * dogOdds) - 1) * 100,
-          });
+          const edge = ((dogProbSet * dogOdds) - 1) * 100;
+          if (edge <= SET_EDGE_SANITY_CAP) {
+            setCands.push({ side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: dogOdds, book: dogBook, edge });
+          }
         }
       }
       // Apply the floor: a set bet is only eligible if its cash probability ≥ floor.
