@@ -677,6 +677,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28a</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -941,21 +942,29 @@
       <div id="backtestResults"></div>
     </div>
 
-    <div class="side-section" id="debugSection" style="display:none;">
-      <h3 style="color:var(--accent-2)">⚠ Debug Dump <button id="copyDebugBtn" class="btn" style="font-size:9px;padding:3px 8px;margin-left:8px;">Copy</button></h3>
-      <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">Events returned but no matches parsed. Copy this and send back for parser fix:</div>
-      <pre id="debugDump" style="background:var(--bg);border:1px solid var(--accent-2);padding:8px;font-size:9px;max-height:240px;overflow:auto;border-radius:2px;color:var(--text);font-family:var(--mono);line-height:1.4;white-space:pre-wrap;word-break:break-all;"></pre>
-    </div>
+    <!-- ── Diagnostics ── grouped; Debug Dump auto-shows only on parse failure -->
+    <div class="side-section" id="diagSection">
+      <h3 style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" id="diagToggle">
+        <span><span id="diagAlert" style="color:var(--accent-2);display:none;">⚠ </span>Diagnostics</span>
+        <span id="diagChevron" style="font-size:10px;opacity:.6;">▸</span>
+      </h3>
 
-    <div class="side-section">
-      <h3>System Log</h3>
-      <div class="log" id="log"></div>
+      <div id="diagBody" style="display:none;">
+        <div id="debugSection" style="display:none;margin-bottom:14px;">
+          <h3 style="color:var(--accent-2);font-size:11px;">⚠ Debug Dump <button id="copyDebugBtn" class="btn" style="font-size:9px;padding:3px 8px;margin-left:8px;">Copy</button></h3>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">Events returned but no matches parsed. Copy this and send back for parser fix:</div>
+          <pre id="debugDump" style="background:var(--bg);border:1px solid var(--accent-2);padding:8px;font-size:9px;max-height:240px;overflow:auto;border-radius:2px;color:var(--text);font-family:var(--mono);line-height:1.4;white-space:pre-wrap;word-break:break-all;"></pre>
+        </div>
+
+        <h3 style="font-size:11px;">System Log</h3>
+        <div class="log" id="log"></div>
+      </div>
     </div>
   </aside>
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28a</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2162,6 +2171,17 @@ const App = {
     $('faqClose').onclick = () => modal.classList.remove('open');
     modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('open'); };
 
+    // Diagnostics collapse/expand
+    const diagToggle = $('diagToggle');
+    if (diagToggle) {
+      diagToggle.onclick = () => {
+        const body = $('diagBody'), chev = $('diagChevron');
+        const open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        if (chev) chev.textContent = open ? '▸' : '▾';
+      };
+    }
+
     // Bet log modal
     const bModal = $('betLogModal');
     $('betLogBtn').onclick = async () => {
@@ -2577,11 +2597,20 @@ const App = {
     const dumps = m.getDebugDumps ? m.getDebugDumps() : [];
     const section = $('debugSection');
     const pre = $('debugDump');
+    const alert = $('diagAlert');
     if (!dumps || dumps.length === 0) {
       section.style.display = 'none';
+      if (alert) alert.style.display = 'none';
       return;
     }
+    // Parse failed: surface it. Auto-expand Diagnostics + flag the header.
     section.style.display = 'block';
+    if (alert) alert.style.display = 'inline';
+    const body = $('diagBody'), chev = $('diagChevron');
+    if (body && body.style.display === 'none') {
+      body.style.display = 'block';
+      if (chev) chev.textContent = '▾';
+    }
     const formatted = dumps.map(d =>
       `// ─── ${d.tour} ───\n` + JSON.stringify(d.sample, null, 2)
     ).join('\n\n');
