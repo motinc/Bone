@@ -677,7 +677,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28a</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28b</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -964,7 +964,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28a</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28b</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1338,6 +1338,12 @@ const TennisModule = (() => {
         const events = (data.events || data.sports?.[0]?.leagues?.[0]?.events) || [];
 
         const beforeCount = out.length;
+        // Track whether this tour actually contained bettable singles matches
+        // (non-post, 2 named singles players) regardless of cross-feed dedup.
+        // Distinguishes a genuine parse failure from "all matches already seen
+        // via the other feed" (ESPN's ATP & WTA feeds share Slam events).
+        let bettableSinglesSeen = 0;   // competitions that SHOULD have parsed
+        let playersExtracted = 0;      // of those, how many gave 2 valid names
 
         // Try multiple parse paths — ESPN's tennis shape varies during tournaments
         for (const e of events) {
@@ -1347,11 +1353,13 @@ const TennisModule = (() => {
             const competitors = comp.competitors || [];
             if (competitors.length >= 2) {
               for (let i = 0; i < competitors.length - 1; i += 2) {
+                bettableSinglesSeen++;
                 const c1 = competitors[i];
                 const c2 = competitors[i+1];
                 const p1 = c1.athlete?.displayName || c1.displayName || c1.athlete?.shortName;
                 const p2 = c2.athlete?.displayName || c2.displayName || c2.athlete?.shortName;
                 if (!p1 || !p2) continue;
+                playersExtracted++;
                 const nm = (e.name || comp.notes?.[0]?.headline || '').toLowerCase();
                 let surface = 'hard';
                 if (/clay|roland|monte|madrid|rome|barcelona|hamburg|kitzbuhel|bastad|umag|gstaad/.test(nm)) surface = 'clay';
@@ -1381,6 +1389,7 @@ const TennisModule = (() => {
 
               const competitors = comp.competitors || [];
               if (competitors.length >= 2) {
+                bettableSinglesSeen++;
                 const c1 = competitors[0];
                 const c2 = competitors[1];
                 const p1 = c1.athlete?.displayName || c1.displayName || c1.athlete?.shortName;
@@ -1388,6 +1397,7 @@ const TennisModule = (() => {
                 if (!p1 || !p2) continue;
                 // skip doubles pairings that slipped through (names with " / ")
                 if (p1.includes('/') || p2.includes('/')) continue;
+                playersExtracted++;
                 const nm = (e.name || e.shortName || gName).toLowerCase();
                 let surface = 'hard';
                 if (/clay|roland|monte|madrid|rome|barcelona|hamburg|kitzbuhel|bastad|umag|gstaad/.test(nm)) surface = 'clay';
@@ -1405,10 +1415,13 @@ const TennisModule = (() => {
 
         const afterCount = out.length;
         const parsedThisTour = afterCount - beforeCount;
-        log(`espn ${t.tour}: ${events.length} events → ${parsedThisTour} matches parsed`, parsedThisTour > 0 ? 'ok' : 'err');
+        log(`espn ${t.tour}: ${events.length} events → ${parsedThisTour} new (${playersExtracted}/${bettableSinglesSeen} singles extracted)`, playersExtracted > 0 ? 'ok' : 'err');
 
-        // If events came back but no matches parsed, save raw for debug dump
-        if (events.length > 0 && parsedThisTour === 0) {
+        // Genuine parse failure = there WERE bettable singles competitions but we
+        // pulled 0 players out of them (a shape the parser doesn't cover).
+        // NOT a failure: extracted players that were already added via the other
+        // feed (shared Slam events dedup to 0 new), or simply no bettable matches.
+        if (bettableSinglesSeen > 0 && playersExtracted === 0) {
           rawDumps.push({ tour: t.tour, sample: events.slice(0, 2) });
         }
       } catch (e) {
@@ -1436,7 +1449,9 @@ const TennisModule = (() => {
     // Expose raw dumps for debug panel
     STATE.lastDebugDumps = rawDumps;
     if (rawDumps.length > 0) {
-      log(`⚠ ${rawDumps.length} tour(s) returned events but parsed 0 matches — see debug panel`, 'err');
+      log(`⚠ ${rawDumps.length} tour(s) had singles events but extracted 0 players — parser shape mismatch, see Diagnostics`, 'err');
+    } else if (out.length === 0) {
+      log('no bettable singles matches found today (all completed or none scheduled)', 'ok');
     }
 
     return out;
