@@ -525,6 +525,7 @@
   .sh-name { color: var(--text); font-weight: 500; }
   .sh-cell { white-space: nowrap; }
   .sh-edge { min-width: 44px; }
+  .sh-prob { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
   .set-input {
     width: 56px; background: var(--bg); border: 1px solid var(--border-bright);
     color: var(--text); font-family: var(--mono); font-size: 10px;
@@ -738,7 +739,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28i</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28j</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1035,7 +1036,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28i</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28j</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2115,6 +2116,8 @@ const TennisModule = (() => {
         const dogProb = m.setHcap.dogPlus15;
         const fairFav = favProb > 0 ? (1/favProb).toFixed(2) : '—';
         const fairDog = dogProb > 0 ? (1/dogProb).toFixed(2) : '—';
+        const pctFav = favProb > 0 ? Math.round(favProb * 100) + '%' : '—';
+        const pctDog = dogProb > 0 ? Math.round(dogProb * 100) + '%' : '—';
         // manually-entered book prices (read off the bookmaker)
         const setFav = opts.setFav || '';
         const setDog = opts.setDog || '';
@@ -2132,14 +2135,14 @@ const TennisModule = (() => {
         };
         const k = `${m.p1}|${m.p2}`;
         shLine = `<div class="sh-block">
-          <div class="sh-head"><span class="sh-tag">SET H'CAP</span><span class="sh-hint">enter book odds →</span></div>
+          <div class="sh-head"><span class="sh-tag">SET H'CAP</span><span class="sh-hint">% = chance it cashes · enter book odds →</span></div>
           <div class="sh-grid">
             <span class="sh-name">${favName.split(' ').pop()} −1.5</span>
-            <span class="sh-cell">fair ${fairFav}</span>
+            <span class="sh-cell"><span class="sh-prob">${pctFav}</span> · fair ${fairFav}</span>
             <input class="set-input" type="number" step="0.01" min="1.01" data-setside="fav" data-key="${k}" value="${setFav}" placeholder="book">
             <span class="sh-edge">${edgeBadge(favEdge)}</span>
             <span class="sh-name">${dogName.split(' ').pop()} +1.5</span>
-            <span class="sh-cell">fair ${fairDog}</span>
+            <span class="sh-cell"><span class="sh-prob">${pctDog}</span> · fair ${fairDog}</span>
             <input class="set-input" type="number" step="0.01" min="1.01" data-setside="dog" data-key="${k}" value="${setDog}" placeholder="book">
             <span class="sh-edge">${edgeBadge(dogEdge)}</span>
           </div>
