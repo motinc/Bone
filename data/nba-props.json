@@ -1,6 +1,6 @@
 {
-  "generated": "2026-05-29T07:56:14.567Z",
-  "count": 6,
+  "generated": "2026-05-29T08:11:27.091Z",
+  "count": 7,
   "edges": [
     {
       "player": "Victor Wembanyama",
@@ -121,6 +121,26 @@
       "gameCount": 69,
       "injury": null,
       "flag": null
+    },
+    {
+      "player": "Jalen Williams",
+      "oppName": "SA",
+      "line": 10.5,
+      "proj": 16.6,
+      "sd": 9.2,
+      "projMin": 27.7,
+      "minStability": 5.6,
+      "pOver": 74.6,
+      "overOdds": 1.81,
+      "underOdds": 1.96,
+      "edgeOver": 35.1,
+      "edgeUnder": -50.3,
+      "openLine": 14.5,
+      "lineMove": -4,
+      "lineMoveDir": "with",
+      "gameCount": 33,
+      "injury": null,
+      "flag": "edge>cap — verify (stale line / rest?)"
     }
   ]
 }
