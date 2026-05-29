@@ -1,0 +1,66 @@
+name: Build NBA data
+
+# Refreshes NBA model + props on a schedule, and commits the data files the
+# dashboard reads. Mirrors the tennis build-data workflow.
+#
+# - scheduled run: appends recent finished games, retrains ratings, refreshes
+#   tonight's props (with injuries + line movement). Light + gentle on ESPN.
+# - manual run: optional full history backfill via the "Extend history" input.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'      # every 6 hours (UTC)
+  workflow_dispatch:
+    inputs:
+      full_backfill:
+        description: 'Extend team history (full 220-day re-walk). Leave false for normal runs.'
+        type: boolean
+        default: false
+
+# allow the workflow to commit back to the repo
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Seed team history
+        run: |
+          if [ "${{ github.event.inputs.full_backfill }}" = "true" ]; then
+            echo "Full 220-day backfill..."
+            node scripts/nba-seed-teams.js
+          else
+            echo "Appending recent games (last 5 days)..."
+            node scripts/nba-seed-teams.js --days 5
+          fi
+
+      - name: Train team ratings
+        run: node scripts/nba-model-teams.js
+
+      - name: Fetch tonight's props
+        run: node scripts/nba-props-fetch.js
+
+      - name: Commit data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/nba-games.json data/nba-ratings.json data/nba-props.json
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "NBA data refresh ($(date -u '+%Y-%m-%d %H:%M UTC'))"
+            git push
+          fi
