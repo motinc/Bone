@@ -207,6 +207,7 @@
   .edge-good { background: rgba(245, 166, 35, 0.18); color: var(--accent); }
   .edge-weak { background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border-bright); }
   .edge-neg { color: var(--bad); }
+  .edge-pos { color: var(--good); }
 
   /* win-probability (confidence) badges */
   .win-badge {
@@ -470,6 +471,7 @@
   .v-bet { background: var(--accent); color: var(--bg); }
   .v-lean { background: rgba(245,166,35,0.18); color: var(--accent); border: 1px solid var(--accent-dim); }
   .v-pass { background: var(--bg-elev-2); color: var(--text-faint); border: 1px solid var(--border); }
+  .v-check { background: rgba(214,58,42,0.15); color: var(--accent-2); border: 1px solid rgba(214,58,42,0.4); }
   .v-suspect { background: var(--accent-2); color: #fff; }
   .v-none { background: transparent; color: var(--text-faint); border: 1px dashed var(--border-bright); }
   .verdict-pick {
@@ -825,7 +827,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28q</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28s</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1135,7 +1137,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28q</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28s</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2359,22 +2361,147 @@ const TennisModule = (() => {
 Modules.tennis = TennisModule;
 
 /* =====================================================================
-   PLACEHOLDER MODULES — CS & NBA
-   Stubs so the tabs exist; real implementation lands in V2+.
+   PLACEHOLDER MODULES — NBA
+   Stub so the tab exists; real implementation in progress.
    ===================================================================== */
 
-Modules.cs = {
-  id: 'cs', name: 'Counter-Strike', badge: 'soon', enabled: false,
-  async init() {},
-  async getTodayEdges() { return []; },
-  getLeaderboard() { return { tour: '', rows: [] }; },
-};
+/* =====================================================================
+   NBA MODULE — player points props (Path B: owns its rendering)
+   Loads prebuilt data/nba-props.json (built by nba-props-fetch.js in the
+   pipeline). Renders its own props table — different shape from tennis —
+   but reuses the shared BetLog, win-floor, and edge thresholds.
+   ===================================================================== */
 
 Modules.nba = {
-  id: 'nba', name: 'NBA Props', badge: 'soon', enabled: false,
-  async init() {},
-  async getTodayEdges() { return []; },
-  getLeaderboard() { return { tour: '', rows: [] }; },
+  id: 'nba', name: 'NBA Props', badge: null, enabled: true,
+  ownsRendering: true,
+  _data: null,
+
+  async init() {
+    if (this._data) return;
+    // Load prebuilt props (deployed) — same pattern as tennis ratings.json.
+    try {
+      const r = await fetch('data/nba-props.json', { cache: 'no-store' });
+      if (r.ok) this._data = await r.json();
+    } catch (e) { /* handled in renderInto */ }
+  },
+
+  // expose edges for any shared tooling
+  async getTodayEdges() { return (this._data && this._data.edges) || []; },
+
+  getLeaderboard() { return { tour: 'NBA', rows: [] }; },
+
+  async renderInto(container) {
+    const data = this._data;
+    if (!data || !data.edges || !data.edges.length) {
+      container.innerHTML = `<div class="empty-state">
+        <p>No NBA props loaded.</p>
+        <p class="note">Run <code>node nba-props-fetch.js</code> in the pipeline to generate
+        <code>data/nba-props.json</code>, then commit it. Props post closest to tip-off, so
+        an empty slate may just mean no games or lines yet.</p>
+      </div>`;
+      return;
+    }
+
+    const minEdge = parseFloat(($('minEdge')||{}).value) || 0;
+    const winFloor = (parseFloat(($('winFloor')||{}).value) || 0) / 100;
+    const bankroll = parseFloat(($('bankroll')||{}).value) || 1000;
+    const stakeMode = ($('stakeMode')||{}).value || 'flat';
+
+    // Build rows: pick the better side (over/under) per prop, apply win-floor.
+    const rows = [];
+    for (const e of data.edges) {
+      const overP = e.pOver / 100, underP = 1 - overP;
+      const overEdge = e.edgeOver, underEdge = e.edgeUnder;
+      // choose side by edge
+      let side, prob, edge, odds, line = e.line;
+      if ((overEdge ?? -99) >= (underEdge ?? -99)) {
+        side = 'OVER'; prob = overP; edge = overEdge; odds = e.overOdds;
+      } else {
+        side = 'UNDER'; prob = underP; edge = underEdge; odds = e.underOdds;
+      }
+      // win-floor: the chance THIS bet cashes must clear the floor
+      const flooredOut = prob < winFloor;
+      // verdict thresholds (shared logic w/ tennis spirit)
+      let verdict, vcls;
+      if (e.flag) { verdict = 'CHECK'; vcls = 'v-check'; }
+      else if (flooredOut) { verdict = 'PASS'; vcls = 'v-pass'; }
+      else if (edge >= 15) { verdict = 'CHECK THIS'; vcls = 'v-check'; }
+      else if (edge >= 7) { verdict = 'BET'; vcls = 'v-bet'; }
+      else if (edge >= 3) { verdict = 'LEAN'; vcls = 'v-lean'; }
+      else { verdict = 'PASS'; vcls = 'v-pass'; }
+      // stake
+      let stake = 0;
+      if (['BET','LEAN','STRONG BET'].includes(verdict)) {
+        if (stakeMode === 'flat') stake = bankroll * 0.01;
+        else {
+          const b = odds - 1, q = 1 - prob;
+          const kelly = b > 0 ? Math.max(0, (b*prob - q) / b) : 0;
+          stake = bankroll * kelly * (stakeMode === 'kelly50' ? 0.5 : 0.25);
+        }
+      }
+      rows.push({ ...e, side, prob, edge, odds, line, verdict, vcls, flooredOut, stake });
+    }
+
+    // sort: actionable + highest edge first, flagged/floored sink
+    const rank = r => (r.vcls==='v-pass'?-1000:0) + (r.flag?-500:0) + (r.edge||-99);
+    rows.sort((a,b) => rank(b) - rank(a));
+
+    const fmtPct = x => (x>=0?'+':'') + x.toFixed(1) + '%';
+    const tbl = document.createElement('table');
+    tbl.className = 'edges-table';
+    tbl.innerHTML = `<thead><tr>
+      <th>Player</th><th>Matchup</th><th>Stat</th><th>Line</th>
+      <th>Proj</th><th>Pick</th><th>Edge</th><th>Verdict</th>
+    </tr></thead><tbody></tbody>`;
+    const tb = tbl.querySelector('tbody');
+
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      if (!['v-pass'].includes(r.vcls) && !r.flag && r.edge >= 7 && r.prob >= 0.5) tr.classList.add('top-tier-row');
+      const edgeCls = r.edge >= 0 ? 'edge-pos' : 'edge-neg';
+      const canLog = r.odds && r.verdict !== 'PASS';
+      tr.innerHTML = `
+        <td><span class="player">${r.player}</span>${r.gameCount?`<div class="sc-hint">${r.gameCount}g · ${r.projMin}min</div>`:''}</td>
+        <td>${r.oppName ? 'vs '+r.oppName : '—'}</td>
+        <td>PTS</td>
+        <td class="num">${r.line}</td>
+        <td class="num">${r.proj}<div class="sc-hint">±${r.sd}</div></td>
+        <td><strong>${r.side}</strong> <span class="sc-hint">@ ${r.odds?r.odds.toFixed(2):'—'}</span></td>
+        <td class="num ${edgeCls}">${r.edge!=null?fmtPct(r.edge):'—'}</td>
+        <td class="verdict-cell">
+          <span class="verdict-badge ${r.vcls}">${r.verdict}</span>
+          ${r.stake?`<div class="verdict-stake">$${r.stake.toFixed(0)}</div>`:''}
+          ${r.flag?`<div class="sc-hint" style="color:var(--bad)">⚠ ${r.flag}</div>`:''}
+          ${canLog?`<button class="bet-add-btn${['BET','LEAN','STRONG BET'].includes(r.verdict)?'':' bet-add-faint'}" data-player="${r.player.replace(/"/g,'&quot;')} ${r.side} ${r.line} PTS" data-odds="${r.odds}" data-stake="${r.stake?r.stake.toFixed(0):''}" data-match="${r.player.replace(/"/g,'&quot;')} ${r.oppName?'vs '+r.oppName:''}" data-prob="${r.prob.toFixed(4)}" data-market="prop" data-verdict="${r.verdict}">${['BET','LEAN','STRONG BET'].includes(r.verdict)?'+ log':'+ log anyway'}</button>`:''}
+        </td>`;
+      tb.appendChild(tr);
+    }
+
+    container.innerHTML = '';
+    const gen = data.generated ? new Date(data.generated).toLocaleString() : '';
+    const banner = document.createElement('div');
+    banner.className = 'panel-sub';
+    banner.style.marginBottom = '10px';
+    banner.innerHTML = `${rows.length} player points props · generated ${gen} · <span style="color:var(--text-faint)">regular-season projections — playoff rotations differ</span>`;
+    container.appendChild(banner);
+    container.appendChild(tbl);
+    $('matchesVal').textContent = rows.length;
+
+    // wire log buttons → shared BetLog
+    container.querySelectorAll('.bet-add-btn').forEach(btn => {
+      btn.onclick = () => {
+        BetLog.add({
+          player: btn.dataset.player, odds: parseFloat(btn.dataset.odds),
+          stake: btn.dataset.stake ? parseFloat(btn.dataset.stake) : 10,
+          match: btn.dataset.match, modelProb: parseFloat(btn.dataset.prob),
+          market: 'prop', sport: 'nba', verdict: btn.dataset.verdict,
+        });
+        log(`logged NBA prop: ${btn.dataset.player} @ ${parseFloat(btn.dataset.odds).toFixed(2)} [${btn.dataset.verdict}]`, 'ok');
+        btn.textContent = 'logged ✓'; btn.disabled = true;
+      };
+    });
+  },
 };
 
 /* =====================================================================
@@ -2963,7 +3090,7 @@ const App = {
       $('content').innerHTML = `
         <div class="placeholder-panel">
           <h2>${m.name}</h2>
-          <p>Module coming in a future build. The dashboard architecture is modular — adding a new sport means dropping in a new module file and registering it. CS will pull from HLTV-derived data; NBA props will use a per-minute projection model with opponent adjustments.</p>
+          <p>Module coming in a future build. The dashboard architecture is modular — adding a new sport means dropping in a new module file and registering it. NBA will use a points-based team model (efficiency + pace) for moneyline and spreads, plus a per-player projection model for props.</p>
         </div>`;
       $('leaderboard').innerHTML = `<div class="lb-row"><span class="lb-name" style="color:var(--text-faint)">no data yet</span></div>`;
       $('lbTour').textContent = '';
@@ -2986,6 +3113,25 @@ const App = {
   async refresh() {
     const m = Modules[this.active];
     if (!m || !m.enabled) return;
+    // Path B: modules that own their rendering (e.g. NBA props, a different
+    // row shape than tennis) bypass the tennis render pipeline entirely. The
+    // tennis path below is untouched — zero regression risk.
+    if (m.ownsRendering) {
+      try {
+        setStatus('loading…');
+        await m.init({ log });
+        await m.renderInto($('content'));
+        $('refreshVal').textContent = new Date().toLocaleTimeString();
+        setStatus('ready', false);
+        this.renderLeaderboard();
+        const keySection = $('oddsApiSection');
+        if (keySection) keySection.style.display = 'none';
+      } catch (e) {
+        log(`refresh failed: ${e.message}`, 'err');
+        setStatus('error', false);
+      }
+      return;
+    }
     try {
       setStatus('computing edges…');
       this._matches = await m.getTodayEdges();
