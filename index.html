@@ -581,6 +581,20 @@
   .bet-add-btn { background: var(--bg-elev); border: 1px solid var(--border-bright); color: var(--accent); font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
   .bet-add-btn:hover { background: var(--accent); color: var(--bg); }
   .bet-add-btn:disabled { opacity: 0.6; cursor: default; }
+  .bet-add-faint {
+    color: var(--text-dim); border-color: var(--border);
+    opacity: 0.75;
+  }
+  .bet-add-faint:hover { background: var(--bg-elev-2); color: var(--text); opacity: 1; }
+
+  /* market disagreement flag — model vs book diverge by ≥15pts */
+  .md-tag {
+    display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: .5px;
+    padding: 1px 5px; border-radius: 2px; margin-left: 6px; cursor: help;
+    vertical-align: middle; font-variant-numeric: tabular-nums;
+  }
+  .md-med  { background: rgba(245,166,35,0.18); color: var(--accent); }
+  .md-high { background: rgba(214,58,42,0.18);  color: var(--bad);    }
 
   /* ─── backtest panel ─── */
   .bt-metrics { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -745,7 +759,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28l</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28m</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1046,7 +1060,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28l</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28m</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2066,13 +2080,21 @@ const TennisModule = (() => {
           : `<span class="market-tag market-ml" title="Moneyline / match winner">ML</span>`;
         const pick = (v.cls !== 'v-pass' && v.cls !== 'v-none') ?
           `<div class="verdict-pick">${marketTag}${pickLabel}</div>` : '';
-        // quick-add: stash the bet details on the button for the click handler
+        // quick-add: log ANY priced bet, including LEAN / CHECK THIS / LOW DATA.
+        // Non-actionable verdicts get a faded "log anyway" variant — clearly marked
+        // so you know you're logging something the model didn't endorse. This lets
+        // CLV/ROI later be sliced by verdict tier (was LEAN actually profitable?).
         const betPlayer = opts.betSide === 1 ? m.p1 : m.p2;
         const betOdds = opts.betOdds != null ? opts.betOdds : (opts.betSide === 1 ? opts.odds1 : opts.odds2);
         const betProb = opts.betProb != null ? opts.betProb : (opts.betSide === 1 ? m.p1Prob : 1 - m.p1Prob);
         const logName = opts.market === 'set' ? (opts.betLabel || betPlayer) : betPlayer;
-        const quickAdd = (isActionable && betOdds) ?
-          `<button class="bet-add-btn" data-player="${logName.replace(/"/g,'&quot;')}" data-odds="${betOdds}" data-stake="${v.stake?v.stake.toFixed(0):''}" data-match="${(m.p1+' vs '+m.p2).replace(/"/g,'&quot;')}" data-prob="${betProb.toFixed(4)}" data-market="${opts.market||'ml'}" title="Log this bet">+ log</button>` : '';
+        let quickAdd = '';
+        if (betOdds) {
+          const btnClass = isActionable ? 'bet-add-btn' : 'bet-add-btn bet-add-faint';
+          const btnLabel = isActionable ? '+ log' : '+ log anyway';
+          const title = isActionable ? 'Log this bet' : `Log anyway (verdict was ${v.label} — flagged for review later)`;
+          quickAdd = `<button class="${btnClass}" data-player="${logName.replace(/"/g,'&quot;')}" data-odds="${betOdds}" data-stake="${v.stake?v.stake.toFixed(0):''}" data-match="${(m.p1+' vs '+m.p2).replace(/"/g,'&quot;')}" data-prob="${betProb.toFixed(4)}" data-market="${opts.market||'ml'}" data-verdict="${v.label}" title="${title}">${btnLabel}</button>`;
+        }
         verdictCell = `<td class="verdict-cell">
           <span class="verdict-badge ${v.cls}">${v.label}</span>
           ${pick}
@@ -2178,6 +2200,15 @@ const TennisModule = (() => {
           <span class="player">${m.p2}</span>
           <span class="surface ${surfClass}">${m.surface}</span>
           ${confTag}
+          ${(() => {
+            const md = opts.marketDisagree;
+            if (!md) return '';
+            const cls = md.severity === 'high' ? 'md-high' : 'md-med';
+            const arrow = md.diff > 0 ? '↑' : '↓';
+            const title = `Model and book disagree by ${Math.abs(md.diff).toFixed(0)} pts. Model favors ${md.modelFavors}, book favors ${md.bookFavors}. ${md.severity === 'high' ? 'Large gap — check for injury, withdrawal, or news before betting.' : 'Moderate gap — verify nothing unusual is going on.'}`;
+            const label = md.severity === 'high' ? '⚠ check news' : '⚠ verify';
+            return `<span class="md-tag ${cls}" title="${title}">${label} ${arrow}${Math.abs(md.diff).toFixed(0)}</span>`;
+          })()}
           <div style="font-size:10px;color:var(--text-faint);margin-top:3px">${m.tour} · ${m.event || ''}</div>
           ${(() => {
             if (!m.startTime) return '';
@@ -2629,7 +2660,8 @@ const App = {
     BetLog.add(bet);
     // brief confirm in the log
     const mk = bet.market === 'set' ? ' (set h\'cap)' : '';
-    log(`logged bet: ${bet.player} @ ${bet.odds.toFixed(2)}${mk}`, 'ok');
+    const vt = bet.verdict ? ` [${bet.verdict}]` : '';
+    log(`logged bet: ${bet.player} @ ${bet.odds.toFixed(2)}${mk}${vt}`, 'ok');
   },
 
   async autoSettleBets() {
@@ -3028,7 +3060,30 @@ const App = {
       const topTier = hasBet && betProb >= 0.60 && bestEdge >= 3
         && ['v-strong','v-bet'].includes(verdict.cls);
 
-      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, setFav: saved.setFav || '', setDog: saved.setDog || '', reasons: mt.reasons || [] };
+      // ── Market disagreement flag ──
+      // Compare model's win-prob for each player against the book's implied
+      // prob (de-vigged across both sides). Big disagreement (15%+ pts) is a
+      // warning the market may know something the model doesn't — injury,
+      // late withdrawal, illness. NOT a betting block; a flag to verify before
+      // betting. Strongest when disagreement is huge (25%+ = "check news").
+      let marketDisagree = null;
+      if (odds1 && odds2) {
+        const impP1raw = 1 / odds1, impP2raw = 1 / odds2;
+        const vig = impP1raw + impP2raw;
+        const impP1 = impP1raw / vig;   // de-vigged book probability for P1
+        const diffP1 = (p1Prob - impP1) * 100;  // positive: model likes P1 more than book
+        const absDiff = Math.abs(diffP1);
+        if (absDiff >= 15) {
+          marketDisagree = {
+            diff: diffP1,
+            severity: absDiff >= 25 ? 'high' : 'med',
+            modelFavors: diffP1 > 0 ? mt.p1 : mt.p2,
+            bookFavors: diffP1 > 0 ? mt.p2 : mt.p1,
+          };
+        }
+      }
+
+      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, marketDisagree, setFav: saved.setFav || '', setDog: saved.setDog || '', reasons: mt.reasons || [] };
     });
 
     // Sort by confidence score: win-rate first, edge as tiebreak (built into the
@@ -3087,7 +3142,7 @@ const App = {
     const tbody = table.querySelector('tbody');
 
     for (const r of visibleRows) {
-      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, confPct: r.confPct, topTier: r.topTier, setFav: r.setFav, setDog: r.setDog, reasons: r.reasons });
+      const tr = m.renderRow(r.mt, { odds1: r.odds1, odds2: r.odds2, src1: r.src1, src2: r.src2, verdict: r.verdict, betSide: r.betSide, market: r.market, betLabel: r.betLabel, bestSet: r.bestSet, betOdds: r.betOdds, betProb: r.betProb, confPct: r.confPct, topTier: r.topTier, marketDisagree: r.marketDisagree, setFav: r.setFav, setDog: r.setDog, reasons: r.reasons });
       if (r.topTier) tr.classList.add('top-tier-row');
       tbody.appendChild(tr);
     }
@@ -3202,6 +3257,7 @@ const App = {
           match: btn.dataset.match,
           modelProb: parseFloat(btn.dataset.prob),
           market: btn.dataset.market || 'ml',
+          verdict: btn.dataset.verdict || null,
         });
         btn.textContent = 'logged ✓';
         btn.disabled = true;
