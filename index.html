@@ -596,6 +596,15 @@
   .md-med  { background: rgba(245,166,35,0.18); color: var(--accent); }
   .md-high { background: rgba(214,58,42,0.18);  color: var(--bad);    }
 
+  /* 🎯 LIKELY tag — informational only, NOT a bet signal */
+  .likely-tag {
+    display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .3px;
+    padding: 1px 6px; border-radius: 2px; margin-left: 6px; cursor: help;
+    vertical-align: middle; font-variant-numeric: tabular-nums;
+    background: rgba(143,200,80,0.14); color: var(--good);
+    border: 1px solid rgba(143,200,80,0.3);
+  }
+
   /* ─── backtest panel ─── */
   .bt-metrics { display: flex; gap: 8px; margin-bottom: 8px; }
   .bt-metric {
@@ -759,7 +768,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28m</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28n</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1060,7 +1069,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28m</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28n</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2208,6 +2217,19 @@ const TennisModule = (() => {
             const title = `Model and book disagree by ${Math.abs(md.diff).toFixed(0)} pts. Model favors ${md.modelFavors}, book favors ${md.bookFavors}. ${md.severity === 'high' ? 'Large gap — check for injury, withdrawal, or news before betting.' : 'Moderate gap — verify nothing unusual is going on.'}`;
             const label = md.severity === 'high' ? '⚠ check news' : '⚠ verify';
             return `<span class="md-tag ${cls}" title="${title}">${label} ${arrow}${Math.abs(md.diff).toFixed(0)}</span>`;
+          })()}
+          ${(() => {
+            // 🎯 LIKELY — informational badge for highly predictable matches.
+            // Pure outcome prediction (≥90% model win-prob for the favored side).
+            // NOT a bet signal — the price usually reflects this, often with no
+            // value. The ★ BET THIS tier remains the only bet recommendation.
+            if (m.p1Prob == null || m.confidence === 'none') return '';
+            const favProb = Math.max(m.p1Prob, 1 - m.p1Prob);
+            if (favProb < 0.90) return '';
+            const favName = m.p1Prob >= 0.5 ? m.p1 : m.p2;
+            const pct = Math.round(favProb * 100);
+            const title = `Model gives ${favName} ${pct}% to win — informational only. The book usually prices this in, so it's rarely a bettable edge.`;
+            return `<span class="likely-tag" title="${title}">🎯 LIKELY ${favName.split(' ').pop()} ${pct}%</span>`;
           })()}
           <div style="font-size:10px;color:var(--text-faint);margin-top:3px">${m.tour} · ${m.event || ''}</div>
           ${(() => {
