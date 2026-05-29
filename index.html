@@ -605,6 +605,16 @@
     border: 1px solid rgba(143,200,80,0.3);
   }
 
+  /* Model % cell — favorite-named primary, P1/P2 split secondary */
+  .model-fav {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .model-split {
+    font-size: 9px; color: var(--text-faint); margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* ─── backtest panel ─── */
   .bt-metrics { display: flex; gap: 8px; margin-bottom: 8px; }
   .bt-metric {
@@ -768,7 +778,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28n</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28p</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1011,6 +1021,15 @@
           <label>Hide started games</label>
           <input type="checkbox" id="hideStarted" style="width:auto;cursor:pointer;">
         </div>
+        <div class="control-row">
+          <label>Sort by</label>
+          <select id="sortMode" style="cursor:pointer;">
+            <option value="default">Win-rate × edge (recommended)</option>
+            <option value="model">Model % (highest first)</option>
+            <option value="straight">2-0 chance (highest first)</option>
+            <option value="edge">Edge (highest first)</option>
+          </select>
+        </div>
         <button class="btn primary" id="refreshBtn" style="margin-top:8px;">↻ Refresh Data</button>
       </div>
     </div>
@@ -1069,7 +1088,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28n</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28p</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -2253,7 +2272,21 @@ const TennisModule = (() => {
           ${shLine}
           ${reasons}
         </td>
-        <td class="num">${(m.p1Prob*100).toFixed(1)}%<br><span style="color:var(--text-faint);font-size:10px">${(100-m.p1Prob*100).toFixed(1)}%</span></td>
+        ${(() => {
+          // Model % cell — always shows the favorite's name + probability,
+          // so you can read it at a glance ("Sabalenka 91%") instead of
+          // decoding which P1/P2 row maps to which player. The P1/P2 split
+          // stays below for precision.
+          if (m.p1Prob == null) return '<td class="num"><span style="color:var(--text-faint)">—</span></td>';
+          const favIsP1 = m.p1Prob >= 0.5;
+          const favName = (favIsP1 ? m.p1 : m.p2).split(' ').pop();
+          const favPct = Math.max(m.p1Prob, 1 - m.p1Prob) * 100;
+          const p1 = (m.p1Prob*100).toFixed(1), p2 = (100-m.p1Prob*100).toFixed(1);
+          return `<td class="num">
+            <div class="model-fav">${favName} ${favPct.toFixed(1)}%</div>
+            <div class="model-split">${p1}% / ${p2}%</div>
+          </td>`;
+        })()}
         <td class="num">${fairOdds1}<br><span style="color:var(--text-faint);font-size:10px">${fairOdds2}</span></td>
         ${oddsCell}
         ${edgeCell(edge1)}
@@ -2749,6 +2782,8 @@ const App = {
     if (hno) hno.onchange = () => { this.hideNoOdds = hno.checked; this.renderEdges(); };
     const hst = $('hideStarted');
     if (hst) hst.onchange = () => { this.hideStarted = hst.checked; this.renderEdges(); };
+    const sm = $('sortMode');
+    if (sm) sm.onchange = () => { this.sortMode = sm.value; this.renderEdges(); };
 
     // Odds API key — persisted in localStorage, read by tennis module
     const keyInput = $('oddsKey');
@@ -3108,10 +3143,32 @@ const App = {
       return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, marketDisagree, setFav: saved.setFav || '', setDog: saved.setDog || '', reasons: mt.reasons || [] };
     });
 
-    // Sort by confidence score: win-rate first, edge as tiebreak (built into the
-    // fractional part). Falls back to raw edge for zero-score rows so PASSes
-    // still order sensibly among themselves.
-    rows.sort((a,b) => (b.confScore - a.confScore) || (b.bestEdge - a.bestEdge));
+    // ── Sort ──
+    // Default: win-rate × edge (the "best bets" ranking). Other modes are
+    // opt-in views — see Controls. Rows with no data sort to the bottom in
+    // every mode so they don't crowd useful matches off the top.
+    const mode = this.sortMode || 'default';
+    const favProbOf = r => r.mt && r.mt.p1Prob != null ? Math.max(r.mt.p1Prob, 1 - r.mt.p1Prob) : -Infinity;
+    const straightOf = r => r.mt && r.mt.setHcap ? (r.mt.setHcap.favMinus15 || -Infinity) : -Infinity;
+    const edgeOf = r => (r.bestEdge != null && r.bestEdge !== -Infinity) ? r.bestEdge : -Infinity;
+
+    if (mode === 'model') {
+      rows.sort((a,b) => favProbOf(b) - favProbOf(a));
+    } else if (mode === 'straight') {
+      rows.sort((a,b) => straightOf(b) - straightOf(a));
+    } else if (mode === 'edge') {
+      // raw edge ignoring win-floor — longshot-friendly view, hence opt-in
+      const rawEdgeOf = r => {
+        if (!r.odds1 && !r.odds2) return -Infinity;
+        const e1 = r.odds1 ? ((r.mt.p1Prob * r.odds1) - 1) * 100 : -Infinity;
+        const e2 = r.odds2 ? (((1 - r.mt.p1Prob) * r.odds2) - 1) * 100 : -Infinity;
+        return Math.max(e1, e2);
+      };
+      rows.sort((a,b) => rawEdgeOf(b) - rawEdgeOf(a));
+    } else {
+      // default: win-rate primary, edge as tiebreak (the "best bets" ranking)
+      rows.sort((a,b) => (b.confScore - a.confScore) || (b.bestEdge - a.bestEdge));
+    }
 
     // Hide games with no odds on either side (toggle in sidebar, default on)
     const hideNoOdds = this.hideNoOdds !== false;
@@ -3133,6 +3190,17 @@ const App = {
 
     const positiveEdges = visibleRows.filter(r => r.bestEdge >= minEdge && r.bestEdge !== -Infinity).length;
     $('edgesVal').textContent = positiveEdges;
+    // Subtitle reflects the active sort so it isn't misleading
+    const sub = $('panelSub');
+    if (sub) {
+      const subMap = {
+        default: 'ranked by win probability, then edge — most likely winners first',
+        model:   'sorted by model % — highest favorite probability first',
+        straight:'sorted by 2-0 chance — most likely straight-sets wins first',
+        edge:    'sorted by raw edge — biggest value gap first (longshots possible)',
+      };
+      sub.textContent = subMap[mode] || subMap.default;
+    }
 
     const container = $('content');
     if (matches.length === 0) {
