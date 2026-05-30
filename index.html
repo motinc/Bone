@@ -600,7 +600,8 @@
     background: var(--bg-elev-2); padding: 1px 5px; border-radius: 2px;
   }
   .sc-hint { font-size: 9px; color: var(--text-faint); }
-  .sc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .sc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .sc-grid.sc-bo5 { grid-template-columns: repeat(3, 1fr); }
   .sc-cell { font-size: 9px; color: var(--text-dim); }
   .sc-lbl { white-space: nowrap; margin-bottom: 1px; }
   .sc-pct { font-size: 11px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -827,7 +828,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28s</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28u</small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1070,6 +1071,10 @@
           <label>Hide started games</label>
           <label class="toggle"><input type="checkbox" id="hideStarted"><span class="toggle-track"></span></label>
         </div>
+        <div class="control-row">
+          <label title="Show only high-win-chance bets that STILL have positive edge. Frequent winners, lower variance, no -EV chalk.">Grind mode</label>
+          <label class="toggle"><input type="checkbox" id="grindMode"><span class="toggle-track"></span></label>
+        </div>
         <div class="control-row" style="flex-direction:column;align-items:stretch;gap:6px;">
           <label>Sort by</label>
           <div class="pill-group" id="sortPills" role="tablist">
@@ -1137,7 +1142,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28s</div>
+  <div>BONE v0.2 // single-file dashboard // build 2026-05-28u</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1488,6 +1493,16 @@ const TennisModule = (() => {
     };
   };
 
+  // Best-of detection. Men's (ATP) singles play best-of-5 ONLY at the four
+  // Grand Slams; everything else (ATP non-Slam, all WTA) is best-of-3. We detect
+  // Slams from the event name. Davis Cup / Olympics are best-of-3 in the modern
+  // era, so only the four majors count.
+  const detectBestOf = (tour, eventName) => {
+    const nm = (eventName || '').toLowerCase();
+    const isSlam = /australian open|roland garros|french open|wimbledon|us open|u\.s\. open/.test(nm);
+    return (tour === 'ATP' && isSlam) ? 5 : 3;
+  };
+
   const fetchTodayMatches = async () => {
     // ESPN public scoreboard
     const tours = [
@@ -1541,6 +1556,7 @@ const TennisModule = (() => {
                 pushMatch({
                   tour: t.tour, p1, p2, surface,
                   event: e.name || comp.notes?.[0]?.headline || '',
+                  bestOf: detectBestOf(t.tour, e.name || comp.notes?.[0]?.headline || ''),
                   status: e.status?.type?.description || comp.status?.type?.description || '',
                   startTime: e.date || comp.date,
                 });
@@ -1579,6 +1595,7 @@ const TennisModule = (() => {
                 pushMatch({
                   tour: t.tour, p1, p2, surface,
                   event: e.name || e.shortName || '',
+                  bestOf: detectBestOf(t.tour, e.name || e.shortName || gName || ''),
                   status: comp.status?.type?.description || '',
                   startTime: comp.date || comp.startDate,
                 });
@@ -1821,40 +1838,37 @@ const TennisModule = (() => {
   };
 
   // ── Set-handicap pricing ───────────────────────────────────────────
-  // From the favourite's match-win prob, look up P(favourite wins 2-0) via the
-  // straight-sets table the pipeline built. In a best-of-3, a -1.5 set line on
-  // the favourite cashes iff they win 2-0. The +1.5 on the underdog cashes iff
-  // the favourite does NOT win 2-0.
-  const setHandicap = (favProb) => {
-    const ss = STATE.straightSets;
+  // bestOf 3: -1.5 covers iff fav wins 2-0 (straightSets table).
+  // bestOf 5: -1.5 covers iff fav wins by 2+ sets = 3-0 OR 3-1 (straightSets5).
+  // The +1.5 on the dog is simply the complement either way.
+  const setHandicap = (favProb, bestOf) => {
+    const ss = bestOf === 5 ? STATE.straightSets5 : STATE.straightSets;
     if (!ss || favProb == null) return null;
     const bin = Math.min(9, Math.max(0, Math.floor(favProb * 10)));
-    let p20 = ss[bin];
-    if (p20 == null) {
+    let cover = ss[bin];
+    if (cover == null) {
       let best = null, bestDist = 99;
       for (const k of Object.keys(ss)) {
         const d = Math.abs(+k - bin);
         if (d < bestDist) { bestDist = d; best = +k; }
       }
       if (best == null) return null;
-      p20 = ss[best];
+      cover = ss[best];
     }
-    p20 = Math.min(p20, favProb);  // can't win 2-0 more often than winning
-    return { favMinus15: p20, dogPlus15: 1 - p20 };
+    cover = Math.min(cover, favProb);  // can't cover more often than winning
+    return { favMinus15: cover, dogPlus15: 1 - cover };
   };
 
   // ── Scoreline distribution ─────────────────────────────────────────
-  // From the favourite's match-win prob, look up the empirical distribution
-  // over the four best-of-3 outcomes (built by the pipeline from real matches).
-  // Returns probabilities oriented to the FAVOURITE, plus which player is fav.
-  // favProb is P(favourite wins the match); favIsP1 says who the favourite is.
-  const scoreDistribution = (favProb) => {
-    const sl = STATE.scorelines;
+  // bestOf 3 → four outcomes (2-0/2-1/1-2/0-2). bestOf 5 → six (3-0/3-1/3-2/
+  // 2-3/1-3/0-3). Returns probabilities oriented to the FAVOURITE plus a
+  // `bestOf` tag so the renderer knows which labels to draw.
+  const scoreDistribution = (favProb, bestOf) => {
+    const sl = bestOf === 5 ? STATE.scorelines5 : STATE.scorelines;
     if (!sl || favProb == null) return null;
     const bin = Math.min(9, Math.max(0, Math.floor(favProb * 10)));
     let d = sl[bin];
     if (d == null) {
-      // nearest populated bin
       let best = null, bestDist = 99;
       for (const k of Object.keys(sl)) {
         const dist = Math.abs(+k - bin);
@@ -1863,13 +1877,20 @@ const TennisModule = (() => {
       if (best == null) return null;
       d = sl[best];
     }
-    // Normalise to sum to 1 (guards against rounding / sparse bins)
+    if (bestOf === 5) {
+      const tot = (d.p30 + d.p31 + d.p32 + d.p23 + d.p13 + d.p03) || 1;
+      return {
+        bestOf: 5,
+        fav30: d.p30/tot, fav31: d.p31/tot, fav32: d.p32/tot,
+        fav23: d.p23/tot, fav13: d.p13/tot, fav03: d.p03/tot,
+        n: d.n,
+      };
+    }
     const tot = (d.p20 + d.p21 + d.p12 + d.p02) || 1;
     return {
-      fav20: d.p20 / tot,   // favourite wins 2-0
-      fav21: d.p21 / tot,   // favourite wins 2-1
-      fav12: d.p12 / tot,   // favourite loses 1-2 (wins a set)
-      fav02: d.p02 / tot,   // favourite loses 0-2
+      bestOf: 3,
+      fav20: d.p20 / tot, fav21: d.p21 / tot,
+      fav12: d.p12 / tot, fav02: d.p02 / tot,
       n: d.n,
     };
   };
@@ -1931,6 +1952,8 @@ const TennisModule = (() => {
       }
       STATE.straightSets = data.straightSets || null;
       STATE.scorelines = data.scorelines || null;
+      STATE.straightSets5 = data.straightSets5 || null;
+      STATE.scorelines5 = data.scorelines5 || null;
       STATE.refDate = data.refDate;
       STATE.pipelineBacktest = data.backtest || null;   // precomputed in the Action
       PIPELINE.loaded = true;
@@ -1999,9 +2022,10 @@ const TennisModule = (() => {
         const auto = lookupOdds(m.p1, m.p2);
         const favProb = Math.max(fp.p1Prob, 1 - fp.p1Prob);
         const favIsP1 = fp.p1Prob >= 0.5;
-        const sh = setHandicap(favProb);
-        const scoreDist = scoreDistribution(favProb);
-        return { ...m, ...fp, autoOdds: auto, setHcap: sh, scoreDist, favIsP1 };
+        const bo = m.bestOf === 5 ? 5 : 3;
+        const sh = setHandicap(favProb, bo);
+        const scoreDist = scoreDistribution(favProb, bo);
+        return { ...m, ...fp, autoOdds: auto, setHcap: sh, scoreDist, favIsP1, bestOf: bo };
       });
       return enriched;
     },
@@ -2200,14 +2224,20 @@ const TennisModule = (() => {
       // Book edge only shown when the line is plausible (sanity-capped), so a
       // mislabeled feed line never shows a fake +79% edge.
       // ── Scoreline distribution (informational) ──
-      // Empirical P over the four best-of-3 outcomes, oriented to each player.
+      // bestOf 3 → four outcomes; bestOf 5 → six. Oriented to each player.
       let scoreLine = '';
       if (m.scoreDist && m.confidence !== 'none') {
         const sd = m.scoreDist;
         const favName = (m.favIsP1 ? m.p1 : m.p2).split(' ').pop();
         const dogName = (m.favIsP1 ? m.p2 : m.p1).split(' ').pop();
-        // Four outcomes from favourite's perspective, most-likely first ordering kept fixed
-        const cells = [
+        const cells = sd.bestOf === 5 ? [
+          { lbl: `${favName} 3-0`, p: sd.fav30 },
+          { lbl: `${favName} 3-1`, p: sd.fav31 },
+          { lbl: `${favName} 3-2`, p: sd.fav32 },
+          { lbl: `${dogName} 3-2`, p: sd.fav23 },  // fav loses 2-3
+          { lbl: `${dogName} 3-1`, p: sd.fav13 },  // fav loses 1-3
+          { lbl: `${dogName} 3-0`, p: sd.fav03 },  // fav loses 0-3
+        ] : [
           { lbl: `${favName} 2-0`, p: sd.fav20 },
           { lbl: `${favName} 2-1`, p: sd.fav21 },
           { lbl: `${dogName} 2-1`, p: sd.fav12 },  // fav loses 1-2 == dog wins 2-1
@@ -2224,8 +2254,8 @@ const TennisModule = (() => {
           </div>`;
         }).join('');
         scoreLine = `<div class="sc-block">
-          <div class="sc-head"><span class="sc-tag">SCORELINE</span><span class="sc-hint">most likely: ${mostLikely.lbl}</span></div>
-          <div class="sc-grid">${bar}</div>
+          <div class="sc-head"><span class="sc-tag">SCORELINE</span>${sd.bestOf===5?'<span class="sc-tag" style="background:rgba(214,58,42,0.15);color:var(--accent-2)">Bo5</span>':''}<span class="sc-hint">most likely: ${mostLikely.lbl}</span></div>
+          <div class="sc-grid${sd.bestOf===5?' sc-bo5':''}">${bar}</div>
         </div>`;
       }
 
@@ -2256,7 +2286,7 @@ const TennisModule = (() => {
         };
         const k = `${m.p1}|${m.p2}`;
         shLine = `<div class="sh-block">
-          <div class="sh-head"><span class="sh-tag">SET H'CAP</span><span class="sh-hint">% = chance it cashes · enter book odds →</span></div>
+          <div class="sh-head"><span class="sh-tag">SET H'CAP</span>${m.bestOf===5?'<span class="sc-tag" style="background:rgba(214,58,42,0.15);color:var(--accent-2)">Bo5</span>':''}<span class="sh-hint">% = chance it cashes · enter book odds →</span></div>
           <div class="sh-grid">
             <span class="sh-name">${favName.split(' ').pop()} −1.5</span>
             <span class="sh-cell"><span class="sh-prob">${pctFav}</span> · fair ${fairFav}</span>
@@ -2956,6 +2986,8 @@ const App = {
     if (hno) hno.onchange = () => { this.hideNoOdds = hno.checked; this.renderEdges(); };
     const hst = $('hideStarted');
     if (hst) hst.onchange = () => { this.hideStarted = hst.checked; this.renderEdges(); };
+    const gm = $('grindMode');
+    if (gm) gm.onchange = () => { this.grindMode = gm.checked; this.renderEdges(); };
     // wire the Sort pill group: tap a pill to set the sort mode, mark it active.
     const pills = document.querySelectorAll('#sortPills .pill');
     pills.forEach(p => {
@@ -3381,9 +3413,20 @@ const App = {
       const st = r.mt && r.mt.startTime ? new Date(r.mt.startTime).getTime() : null;
       return st != null && !isNaN(st) && st <= now;
     };
+    // Grind mode: only high-win-chance bets that STILL clear the edge bar.
+    // The point is frequent winners WITHOUT -EV chalk — so a row must both
+    // (a) have the model giving the recommended side a high win prob, AND
+    // (b) carry a real positive edge above the minimum. A short-odds favorite
+    // with no edge is exactly what this filter removes.
+    const grind = this.grindMode === true;
+    const GRIND_WIN_FLOOR = 0.70;
     const visibleRows = rows.filter(r => {
       if (hideNoOdds && !(r.odds1 || r.odds2)) return false;
       if (hideStarted && hasStarted(r)) return false;
+      if (grind) {
+        const hasRealEdge = r.bestEdge !== -Infinity && r.bestEdge >= minEdge && r.bestEdge > 0;
+        if (!(r.betProb >= GRIND_WIN_FLOOR && hasRealEdge)) return false;
+      }
       return true;
     });
     const hiddenCount = rows.length - visibleRows.length;
@@ -3401,6 +3444,7 @@ const App = {
         edge:    'sorted by raw edge — biggest value gap first (longshots possible)',
       };
       sub.textContent = subMap[mode] || subMap.default;
+      if (grind) sub.textContent = 'GRIND MODE — only ' + Math.round(GRIND_WIN_FLOOR*100) + '%+ win-chance bets that still have positive edge';
     }
 
     const container = $('content');
