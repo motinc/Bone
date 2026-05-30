@@ -828,7 +828,7 @@
   <div class="brand">
     BONE<span class="dot">.</span>
     <small>BETS OF NOTABLE EDGE // MOT.INC</small>
-    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;">build 2026-05-28u</small>
+    <small class="build-stamp" id="buildStamp" style="opacity:.5;font-size:9px;letter-spacing:.5px;"></small>
   </div>
   <div class="header-meta">
     <div class="stat">
@@ -1142,7 +1142,7 @@
 </main>
 
 <footer>
-  <div>BONE v0.2 // single-file dashboard // build 2026-05-28u</div>
+  <div id="footerVersion">BONE // single-file dashboard</div>
   <div>data: sackmann/tennis_atp · espn scoreboard · self-hosted on your domain</div>
 </footer>
 
@@ -1152,6 +1152,10 @@
    Architecture: each sport is a self-contained "module" implementing
    a small interface. Add a new sport = drop in a new module + register.
    ===================================================================== */
+
+// ── App version. Single source of truth. Bump this (and only this) when you
+// ship a meaningful change. Semantic: vMAJOR.MINOR. Shown in header + footer.
+const APP_VERSION = 'v1.0';
 
 const $ = (id) => document.getElementById(id);
 const log = (msg, cls = 'info') => {
@@ -1838,25 +1842,45 @@ const TennisModule = (() => {
   };
 
   // ── Set-handicap pricing ───────────────────────────────────────────
-  // bestOf 3: -1.5 covers iff fav wins 2-0 (straightSets table).
-  // bestOf 5: -1.5 covers iff fav wins by 2+ sets = 3-0 OR 3-1 (straightSets5).
-  // The +1.5 on the dog is simply the complement either way.
-  const setHandicap = (favProb, bestOf) => {
-    const ss = bestOf === 5 ? STATE.straightSets5 : STATE.straightSets;
-    if (!ss || favProb == null) return null;
+  // bestOf 3: -1.5 covers iff fav wins 2-0.
+  // bestOf 5: -1.5 covers iff fav wins by 2+ sets = 3-0 OR 3-1; ALSO offer
+  //           -2.5 which covers iff fav wins 3-0 (a clean sweep) — a longer,
+  //           more interesting line that only exists in best-of-5.
+  // The +N.5 on the dog is the complement of the matching favourite line.
+  const nearestBin = (tbl, favProb) => {
+    if (!tbl) return null;
     const bin = Math.min(9, Math.max(0, Math.floor(favProb * 10)));
-    let cover = ss[bin];
-    if (cover == null) {
-      let best = null, bestDist = 99;
-      for (const k of Object.keys(ss)) {
-        const d = Math.abs(+k - bin);
-        if (d < bestDist) { bestDist = d; best = +k; }
+    if (tbl[bin] != null) return tbl[bin];
+    let best = null, bestDist = 99;
+    for (const k of Object.keys(tbl)) { const d = Math.abs(+k - bin); if (d < bestDist) { bestDist = d; best = +k; } }
+    return best == null ? null : tbl[best];
+  };
+  const setHandicap = (favProb, bestOf) => {
+    if (favProb == null) return null;
+    if (bestOf === 5) {
+      // pull the full bo5 distribution bin so we can price both -1.5 and -2.5
+      const d = nearestBin(STATE.scorelines5, favProb);
+      if (!d) {
+        // fall back to straightSets5 for -1.5 only if the full dist is missing
+        let cover = nearestBin(STATE.straightSets5, favProb);
+        if (cover == null) return null;
+        cover = Math.min(cover, favProb);
+        return { favMinus15: cover, dogPlus15: 1 - cover };
       }
-      if (best == null) return null;
-      cover = ss[best];
+      const tot = (d.p30 + d.p31 + d.p32 + d.p23 + d.p13 + d.p03) || 1;
+      const cover15 = Math.min((d.p30 + d.p31) / tot, favProb);   // win by 2+
+      const cover25 = Math.min(d.p30 / tot, favProb);             // clean sweep 3-0
+      return {
+        favMinus15: cover15, dogPlus15: 1 - cover15,
+        favMinus25: cover25, dogPlus25: 1 - cover25,
+        bestOf: 5,
+      };
     }
-    cover = Math.min(cover, favProb);  // can't cover more often than winning
-    return { favMinus15: cover, dogPlus15: 1 - cover };
+    // best-of-3
+    let cover = nearestBin(STATE.straightSets, favProb);
+    if (cover == null) return null;
+    cover = Math.min(cover, favProb);
+    return { favMinus15: cover, dogPlus15: 1 - cover, bestOf: 3 };
   };
 
   // ── Scoreline distribution ─────────────────────────────────────────
@@ -2285,17 +2309,44 @@ const TennisModule = (() => {
           return `<span class="edge-badge ${cls}" style="font-size:8px">${e>=0?'+':''}${e.toFixed(1)}%</span>`;
         };
         const k = `${m.p1}|${m.p2}`;
+        const favLast = favName.split(' ').pop();
+        const dogLast = dogName.split(' ').pop();
+
+        // -2.5 row (best-of-5 only): favourite must win 3-0 (clean sweep)
+        let rows25 = '';
+        if (m.setHcap.bestOf === 5 && m.setHcap.favMinus25 != null) {
+          const favProb25 = m.setHcap.favMinus25;
+          const dogProb25 = m.setHcap.dogPlus25;
+          const fairFav25 = favProb25 > 0 ? (1/favProb25).toFixed(2) : '—';
+          const fairDog25 = dogProb25 > 0 ? (1/dogProb25).toFixed(2) : '—';
+          const pctFav25 = favProb25 > 0 ? Math.round(favProb25 * 100) + '%' : '—';
+          const pctDog25 = dogProb25 > 0 ? Math.round(dogProb25 * 100) + '%' : '—';
+          const setFav25 = opts.setFav25 || '';
+          const setDog25 = opts.setDog25 || '';
+          const favEdge25 = edgeOf(favProb25, setFav25);
+          const dogEdge25 = edgeOf(dogProb25, setDog25);
+          rows25 = `
+            <span class="sh-name">${favLast} −2.5</span>
+            <span class="sh-cell"><span class="sh-prob">${pctFav25}</span> · fair ${fairFav25}</span>
+            <input class="set-input" type="number" step="0.01" min="1.01" data-setside="fav25" data-key="${k}" value="${setFav25}" placeholder="book">
+            <span class="sh-edge">${edgeBadge(favEdge25)}</span>
+            <span class="sh-name">${dogLast} +2.5</span>
+            <span class="sh-cell"><span class="sh-prob">${pctDog25}</span> · fair ${fairDog25}</span>
+            <input class="set-input" type="number" step="0.01" min="1.01" data-setside="dog25" data-key="${k}" value="${setDog25}" placeholder="book">
+            <span class="sh-edge">${edgeBadge(dogEdge25)}</span>`;
+        }
+
         shLine = `<div class="sh-block">
           <div class="sh-head"><span class="sh-tag">SET H'CAP</span>${m.bestOf===5?'<span class="sc-tag" style="background:rgba(214,58,42,0.15);color:var(--accent-2)">Bo5</span>':''}<span class="sh-hint">% = chance it cashes · enter book odds →</span></div>
           <div class="sh-grid">
-            <span class="sh-name">${favName.split(' ').pop()} −1.5</span>
+            <span class="sh-name">${favLast} −1.5</span>
             <span class="sh-cell"><span class="sh-prob">${pctFav}</span> · fair ${fairFav}</span>
             <input class="set-input" type="number" step="0.01" min="1.01" data-setside="fav" data-key="${k}" value="${setFav}" placeholder="book">
             <span class="sh-edge">${edgeBadge(favEdge)}</span>
-            <span class="sh-name">${dogName.split(' ').pop()} +1.5</span>
+            <span class="sh-name">${dogLast} +1.5</span>
             <span class="sh-cell"><span class="sh-prob">${pctDog}</span> · fair ${fairDog}</span>
             <input class="set-input" type="number" step="0.01" min="1.01" data-setside="dog" data-key="${k}" value="${setDog}" placeholder="book">
-            <span class="sh-edge">${edgeBadge(dogEdge)}</span>
+            <span class="sh-edge">${edgeBadge(dogEdge)}</span>${rows25}
           </div>
         </div>`;
       }
@@ -3268,12 +3319,14 @@ const App = {
       const sh = mt.setHcap;
       const setFavOdds = saved.setFav ? parseFloat(saved.setFav) : null;  // fav -1.5
       const setDogOdds = saved.setDog ? parseFloat(saved.setDog) : null;  // dog +1.5
+      const setFav25Odds = saved.setFav25 ? parseFloat(saved.setFav25) : null;  // fav -2.5 (bo5)
+      const setDog25Odds = saved.setDog25 ? parseFloat(saved.setDog25) : null;  // dog +2.5 (bo5)
       const setCands = [];  // each: { side(1/2), line, prob, odds, edge }
       // Light sanity cap — manual entry can have typos (e.g. 12.0 vs 1.20).
       const SET_EDGE_SANITY_CAP = 40;  // %
       if (sh && mt.confidence !== 'none') {
         const favIsP1 = mt.favIsP1;
-        // Favourite -1.5 (must win 2-0)
+        // Favourite -1.5 (must win 2-0 in bo3, or 3-0/3-1 in bo5)
         const favProbSet = sh.favMinus15;
         if (favProbSet > 0 && setFavOdds) {
           const edge = ((favProbSet * setFavOdds) - 1) * 100;
@@ -3287,6 +3340,21 @@ const App = {
           const edge = ((dogProbSet * setDogOdds) - 1) * 100;
           if (edge <= SET_EDGE_SANITY_CAP) {
             setCands.push({ side: favIsP1 ? 2 : 1, line: '+1.5', prob: dogProbSet, odds: setDogOdds, book: 'manual', edge });
+          }
+        }
+        // Best-of-5 only: -2.5 (fav must win 3-0) and +2.5 (dog avoids a sweep loss)
+        if (sh.bestOf === 5) {
+          if (sh.favMinus25 > 0 && setFav25Odds) {
+            const edge = ((sh.favMinus25 * setFav25Odds) - 1) * 100;
+            if (edge <= SET_EDGE_SANITY_CAP) {
+              setCands.push({ side: favIsP1 ? 1 : 2, line: '-2.5', prob: sh.favMinus25, odds: setFav25Odds, book: 'manual', edge });
+            }
+          }
+          if (sh.dogPlus25 > 0 && setDog25Odds) {
+            const edge = ((sh.dogPlus25 * setDog25Odds) - 1) * 100;
+            if (edge <= SET_EDGE_SANITY_CAP) {
+              setCands.push({ side: favIsP1 ? 2 : 1, line: '+2.5', prob: sh.dogPlus25, odds: setDog25Odds, book: 'manual', edge });
+            }
           }
         }
       }
@@ -3373,7 +3441,7 @@ const App = {
         }
       }
 
-      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, marketDisagree, setFav: saved.setFav || '', setDog: saved.setDog || '', reasons: mt.reasons || [] };
+      return { mt, odds1, odds2, src1, src2, bestEdge, betSide, betPlayer, betOdds, betBook, betProb, betLabel, market, bestSet, verdict, flooredOut, confScore, confPct, topTier, marketDisagree, setFav: saved.setFav || '', setDog: saved.setDog || '', setFav25: saved.setFav25 || '', setDog25: saved.setDog25 || '', reasons: mt.reasons || [] };
     });
 
     // ── Sort ──
@@ -3563,9 +3631,12 @@ const App = {
     container.querySelectorAll('.set-input').forEach(inp => {
       inp.oninput = () => {
         const key = inp.dataset.key;
-        const side = inp.dataset.setside;  // 'fav' or 'dog'
+        const side = inp.dataset.setside;  // 'fav' | 'dog' | 'fav25' | 'dog25'
+        const fieldMap = { fav: 'setFav', dog: 'setDog', fav25: 'setFav25', dog25: 'setDog25' };
+        const field = fieldMap[side];
+        if (!field) return;
         this.odds[key] = this.odds[key] || {};
-        this.odds[key][side === 'fav' ? 'setFav' : 'setDog'] = inp.value;
+        this.odds[key][field] = inp.value;
         this.saveOdds();
         clearTimeout(this._reflowTimer);
         this._reflowTimer = setTimeout(() => this.renderEdges(), 400);
@@ -3676,7 +3747,10 @@ const App = {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-  log('booting BONE v0.2', 'info');
+  // Stamp the version from the single APP_VERSION constant — header + footer.
+  const bs = $('buildStamp'); if (bs) bs.textContent = APP_VERSION;
+  const fv = $('footerVersion'); if (fv) fv.textContent = `BONE ${APP_VERSION} // single-file dashboard`;
+  log(`booting BONE ${APP_VERSION}`, 'info');
   App.init();
 });
 </script>
