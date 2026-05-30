@@ -1155,7 +1155,7 @@
 
 // ── App version. Single source of truth. Bump this (and only this) when you
 // ship a meaningful change. Semantic: vMAJOR.MINOR. Shown in header + footer.
-const APP_VERSION = 'v1.0';
+const APP_VERSION = 'v1.1';
 
 const $ = (id) => document.getElementById(id);
 const log = (msg, cls = 'info') => {
@@ -2046,7 +2046,17 @@ const TennisModule = (() => {
         const auto = lookupOdds(m.p1, m.p2);
         const favProb = Math.max(fp.p1Prob, 1 - fp.p1Prob);
         const favIsP1 = fp.p1Prob >= 0.5;
-        const bo = m.bestOf === 5 ? 5 : 3;
+        // Authoritative best-of: only men's (ATP) Grand Slam singles are bo5.
+        // The parse-time guess can be wrong when ESPN serves WTA matches under a
+        // combined/ATP feed, so we re-check using the players' actual tour tags
+        // from the ELO data. If EITHER player is WTA, it's women's tennis → bo3,
+        // which is always best-of-3 (no bo5 anywhere in the women's game).
+        let bo = m.bestOf === 5 ? 5 : 3;
+        if (bo === 5) {
+          const pa = findPlayer(m.p1), pb = findPlayer(m.p2);
+          const anyWta = (pa && pa.tour === 'WTA') || (pb && pb.tour === 'WTA');
+          if (anyWta) bo = 3;
+        }
         const sh = setHandicap(favProb, bo);
         const scoreDist = scoreDistribution(favProb, bo);
         return { ...m, ...fp, autoOdds: auto, setHcap: sh, scoreDist, favIsP1, bestOf: bo };
