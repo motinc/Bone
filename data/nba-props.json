@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-30T02:34:44.708Z",
+  "generated": "2026-05-30T08:22:03.865Z",
   "count": 6,
   "edges": [
     {
@@ -63,26 +63,6 @@
       "flag": null
     },
     {
-      "player": "Stephon Castle",
-      "oppName": "OKC",
-      "line": 16.5,
-      "proj": 16.8,
-      "sd": 9.1,
-      "projMin": 31.6,
-      "minStability": 5.4,
-      "pOver": 51.5,
-      "overOdds": 1.99,
-      "underOdds": null,
-      "edgeOver": 2.5,
-      "edgeUnder": null,
-      "openLine": 16.5,
-      "lineMove": 0,
-      "lineMoveDir": "flat",
-      "gameCount": 69,
-      "injury": null,
-      "flag": null
-    },
-    {
       "player": "Victor Wembanyama",
       "oppName": "OKC",
       "line": 26.5,
@@ -119,6 +99,26 @@
       "lineMove": 0,
       "lineMoveDir": "flat",
       "gameCount": 68,
+      "injury": null,
+      "flag": null
+    },
+    {
+      "player": "Stephon Castle",
+      "oppName": "OKC",
+      "line": 16.5,
+      "proj": 16.8,
+      "sd": 9.1,
+      "projMin": 31.6,
+      "minStability": 5.4,
+      "pOver": 51.5,
+      "overOdds": 1.79,
+      "underOdds": 1.99,
+      "edgeOver": -7.8,
+      "edgeUnder": -3.5,
+      "openLine": 16.5,
+      "lineMove": 0,
+      "lineMoveDir": "flat",
+      "gameCount": 69,
       "injury": null,
       "flag": null
     }
