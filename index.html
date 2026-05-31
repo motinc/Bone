@@ -1076,6 +1076,16 @@
           <label class="toggle"><input type="checkbox" id="grindMode"><span class="toggle-track"></span></label>
         </div>
         <div class="control-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+          <label>Starting within</label>
+          <div class="pill-group" id="windowPills" role="tablist">
+            <button class="pill" data-window="4" title="Only matches starting within 4 hours">4h</button>
+            <button class="pill" data-window="8" title="Only matches starting within 8 hours">8h</button>
+            <button class="pill" data-window="12" title="Only matches starting within 12 hours">12h</button>
+            <button class="pill" data-window="24" title="Only matches starting within 24 hours">24h</button>
+            <button class="pill is-active" data-window="0" title="No time limit — show all matches">All</button>
+          </div>
+        </div>
+        <div class="control-row" style="flex-direction:column;align-items:stretch;gap:6px;">
           <label>Sort by</label>
           <div class="pill-group" id="sortPills" role="tablist">
             <button class="pill is-active" data-sort="default" title="Win-rate primary, edge tiebreak — the recommended ranking">Best</button>
@@ -1155,7 +1165,7 @@
 
 // ── App version. Single source of truth. Bump this (and only this) when you
 // ship a meaningful change. Semantic: vMAJOR.MINOR. Shown in header + footer.
-const APP_VERSION = 'v1.1';
+const APP_VERSION = 'v1.2';
 
 const $ = (id) => document.getElementById(id);
 const log = (msg, cls = 'info') => {
@@ -3059,6 +3069,16 @@ const App = {
         this.renderEdges();
       };
     });
+    // wire the time-window pill group: filter to matches starting within N hours.
+    const wpills = document.querySelectorAll('#windowPills .pill');
+    wpills.forEach(p => {
+      p.onclick = () => {
+        wpills.forEach(x => x.classList.remove('is-active'));
+        p.classList.add('is-active');
+        this.windowHours = parseInt(p.dataset.window, 10) || 0;   // 0 = all
+        this.renderEdges();
+      };
+    });
 
     // Odds API key — persisted in localStorage, read by tennis module
     const keyInput = $('oddsKey');
@@ -3498,9 +3518,21 @@ const App = {
     // with no edge is exactly what this filter removes.
     const grind = this.grindMode === true;
     const GRIND_WIN_FLOOR = 0.70;
+    // Time window: show only matches starting within N hours (0 = no limit).
+    // A match with no known start time is kept (we can't filter what we can't
+    // time), and a match already started is handled by the hideStarted toggle.
+    const windowHours = this.windowHours || 0;
+    const windowMs = windowHours * 3600 * 1000;
+    const withinWindow = (r) => {
+      if (!windowHours) return true;
+      const st = r.mt && r.mt.startTime ? new Date(r.mt.startTime).getTime() : null;
+      if (st == null || isNaN(st)) return true;   // unknown start → don't hide
+      return st <= now + windowMs;                 // starts within the window (incl. already started)
+    };
     const visibleRows = rows.filter(r => {
       if (hideNoOdds && !(r.odds1 || r.odds2)) return false;
       if (hideStarted && hasStarted(r)) return false;
+      if (!withinWindow(r)) return false;
       if (grind) {
         const hasRealEdge = r.bestEdge !== -Infinity && r.bestEdge >= minEdge && r.bestEdge > 0;
         if (!(r.betProb >= GRIND_WIN_FLOOR && hasRealEdge)) return false;
@@ -3523,6 +3555,7 @@ const App = {
       };
       sub.textContent = subMap[mode] || subMap.default;
       if (grind) sub.textContent = 'GRIND MODE — only ' + Math.round(GRIND_WIN_FLOOR*100) + '%+ win-chance bets that still have positive edge';
+      if (windowHours) sub.textContent += ` · next ${windowHours}h only`;
     }
 
     const container = $('content');
