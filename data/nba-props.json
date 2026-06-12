@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-12T14:45:38.357Z",
+  "generated": "2026-06-12T20:01:50.091Z",
   "count": 8,
   "edges": [
     {
@@ -92,9 +92,9 @@
       "minStability": 6.7,
       "pOver": 59,
       "overOdds": 1.78,
-      "underOdds": 2,
+      "underOdds": 2.01,
       "edgeOver": 4.9,
-      "edgeUnder": -17.9,
+      "edgeUnder": -17.5,
       "openLine": 14.5,
       "lineMove": 0,
       "lineMoveDir": "flat",
