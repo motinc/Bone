@@ -1,6 +1,6 @@
 {
-  "generated": "2026-06-30T09:23:24.968Z",
-  "count": 7,
+  "generated": "2026-06-30T14:06:43.688Z",
+  "count": 8,
   "edges": [
     {
       "player": "OG Anunoby",
@@ -99,6 +99,26 @@
       "lineMove": 1,
       "lineMoveDir": "against",
       "gameCount": 82,
+      "injury": null,
+      "flag": null
+    },
+    {
+      "player": "De'Aaron Fox",
+      "oppName": "NY",
+      "line": 15.5,
+      "proj": 16.6,
+      "sd": 9.4,
+      "projMin": 30.9,
+      "minStability": 6.7,
+      "pOver": 54.5,
+      "overOdds": 1.84,
+      "underOdds": 1.93,
+      "edgeOver": 0.3,
+      "edgeUnder": -12.2,
+      "openLine": 14.5,
+      "lineMove": 1,
+      "lineMoveDir": "against",
+      "gameCount": 76,
       "injury": null,
       "flag": null
     },
