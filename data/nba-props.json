@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-07T14:15:23.537Z",
+  "generated": "2026-07-07T19:46:27.725Z",
   "count": 8,
   "edges": [
     {
@@ -159,7 +159,7 @@
       "lineMove": 1,
       "lineMoveDir": "with",
       "gameCount": 78,
-      "injury": null,
+      "injury": "day-to-day",
       "flag": "edge>cap — verify (stale line / rest?)"
     }
   ]
