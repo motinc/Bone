@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-30T03:56:12.756Z",
+  "generated": "2026-10-30T11:58:43.668Z",
   "count": 17,
   "edges": [
     {
@@ -90,7 +90,7 @@
       "sd": 10.7,
       "projMin": 32.3,
       "minStability": 4.5,
-      "pOver": 61.2,
+      "pOver": 61.3,
       "overOdds": 1.84,
       "underOdds": 1.93,
       "edgeOver": 12.7,
@@ -179,26 +179,6 @@
       "lineMove": -1,
       "lineMoveDir": "against",
       "gameCount": 75,
-      "injury": null,
-      "flag": null
-    },
-    {
-      "player": "Ja Morant",
-      "oppName": "POR",
-      "line": 18.5,
-      "proj": 20.9,
-      "sd": 11.8,
-      "projMin": 29.3,
-      "minStability": 6.5,
-      "pOver": 58.2,
-      "overOdds": 1.84,
-      "underOdds": 1.93,
-      "edgeOver": 7.1,
-      "edgeUnder": -19.4,
-      "openLine": 17.5,
-      "lineMove": 1,
-      "lineMoveDir": "against",
-      "gameCount": 20,
       "injury": null,
       "flag": null
     },
@@ -341,6 +321,26 @@
       "gameCount": 82,
       "injury": null,
       "flag": "edge>cap — verify (stale line / rest?)"
+    },
+    {
+      "player": "Ja Morant",
+      "oppName": "POR",
+      "line": 18.5,
+      "proj": 21,
+      "sd": 11.8,
+      "projMin": 29.3,
+      "minStability": 6.5,
+      "pOver": 58.3,
+      "overOdds": 1.84,
+      "underOdds": 1.93,
+      "edgeOver": 7.2,
+      "edgeUnder": -19.5,
+      "openLine": 17.5,
+      "lineMove": 1,
+      "lineMoveDir": "against",
+      "gameCount": 20,
+      "injury": "day-to-day",
+      "flag": "day-to-day — confirm active"
     }
   ]
 }
