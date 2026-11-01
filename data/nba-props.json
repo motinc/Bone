@@ -1,6 +1,6 @@
 {
-  "generated": "2026-11-01T03:47:51.949Z",
-  "count": 36,
+  "generated": "2026-11-01T12:31:22.303Z",
+  "count": 37,
   "edges": [
     {
       "player": "Jeremiah Fears",
@@ -719,6 +719,26 @@
       "lineMove": 0,
       "lineMoveDir": "flat",
       "gameCount": 75,
+      "injury": "day-to-day",
+      "flag": "day-to-day — confirm active"
+    },
+    {
+      "player": "LeBron James",
+      "oppName": null,
+      "line": 18.5,
+      "proj": 18.9,
+      "sd": 10.8,
+      "projMin": 29.3,
+      "minStability": 7.2,
+      "pOver": 51.4,
+      "overOdds": 1.92,
+      "underOdds": 1.84,
+      "edgeOver": -1.3,
+      "edgeUnder": -10.6,
+      "openLine": 20.5,
+      "lineMove": -2,
+      "lineMoveDir": "with",
+      "gameCount": 63,
       "injury": "day-to-day",
       "flag": "day-to-day — confirm active"
     }
