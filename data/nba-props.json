@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-12T05:30:59.074Z",
+  "generated": "2026-11-12T14:30:17.139Z",
   "count": 46,
   "edges": [
     {
@@ -13,8 +13,8 @@
       "pOver": 31.6,
       "overOdds": 1.96,
       "underOdds": 1.81,
-      "edgeOver": -38,
-      "edgeUnder": 23.7,
+      "edgeOver": -38.1,
+      "edgeUnder": 23.8,
       "openLine": 32.5,
       "lineMove": 2,
       "lineMoveDir": "with",
