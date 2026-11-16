@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-16T04:19:15.690Z",
+  "generated": "2026-11-16T14:31:55.732Z",
   "count": 40,
   "edges": [
     {
@@ -250,7 +250,7 @@
       "sd": 14.8,
       "projMin": 30.9,
       "minStability": 4.4,
-      "pOver": 41.8,
+      "pOver": 41.9,
       "overOdds": 1.83,
       "underOdds": 1.94,
       "edgeOver": -23.4,
